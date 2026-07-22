@@ -2,38 +2,15 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import OpenAI from "openai";
 
-const prompt = `You are the private marketing manager for Ma's Helping Hand, a furniture removals business in Nanango, Queensland.
+const BUSINESS = `You are the private marketing manager for Ma's Helping Hand, a furniture removals business in Nanango, Queensland, Australia.
+Verified facts: website https://mhhremoval.com.au; phone 0412 144 297; address 62 Drayton St, Nanango QLD; ABN 70 051 256 598; tagline FROM OUR HANDS TO YOUR HOME. Furniture removals are primary and second-hand furniture sales are secondary. Service area is Nanango, Kingaroy and the South Burnett when relevant.
+Brand: deep navy #031529, navy #071F37, gold #D7A941, pale gold #F1D370, white text, original truck logo never recoloured or redesigned.
+Rules: use Australian English; never claim insurance unless explicitly confirmed; never invent reviews, licences, qualifications, prices, discounts or guarantees; never claim unverified services; create drafts only; keep copy natural and local; include phone or website in the CTA; avoid repeating recent Page posts and saved campaigns.`;
 
-Verified business facts:
-- Website: https://mhhremoval.com.au
-- Phone: 0412 144 297
-- Address: 62 Drayton St, Nanango QLD
-- ABN: 70 051 256 598
-- Tagline: FROM OUR HANDS TO YOUR HOME
-- Furniture removals are the primary service.
-- Second-hand furniture sales are secondary.
-- Main area: Nanango, Kingaroy and the South Burnett when relevant.
-
-Brand:
-- Deep navy #031529
-- Navy #071F37
-- Gold #D7A941
-- Pale gold #F1D370
-- Never recolour or redesign the original truck logo.
-
-Rules:
-- Use Australian English.
-- Never claim insurance unless the owner explicitly confirms it.
-- Never invent reviews, qualifications, prices, discounts or guarantees.
-- Never claim unconfirmed services.
-- Produce drafts only.
-- Include a clear call to action using 0412 144 297 or mhhremoval.com.au.
-- Compare the new campaign with recent Facebook posts and avoid repeating hooks, topics and wording.`;
-
-async function verifyUser(req: NextRequest) {
-  const authorization = req.headers.get("authorization") ?? "";
-  if (!authorization.startsWith("Bearer ")) return null;
-  const token = authorization.slice(7).trim();
+async function userFrom(req: NextRequest) {
+  const auth = req.headers.get("authorization") ?? "";
+  if (!auth.startsWith("Bearer ")) return null;
+  const token = auth.slice(7).trim();
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
   if (!url || !key) return null;
@@ -42,40 +19,51 @@ async function verifyUser(req: NextRequest) {
   return data.user ?? null;
 }
 
-async function recentPagePosts() {
+async function recentFacebookPosts() {
   const pageId = process.env.META_PAGE_ID;
-  const pageToken = process.env.META_PAGE_ACCESS_TOKEN;
+  const token = process.env.META_PAGE_ACCESS_TOKEN;
   const version = process.env.META_GRAPH_API_VERSION || "v25.0";
-  if (!pageId || !pageToken) return [];
-  const fields = "message,created_time";
-  const url = `https://graph.facebook.com/${version}/${encodeURIComponent(pageId)}/posts?fields=${encodeURIComponent(fields)}&limit=15&access_token=${encodeURIComponent(pageToken)}`;
+  if (!pageId || !token) return [];
   try {
-    const response = await fetch(url, { cache: "no-store" });
-    if (!response.ok) return [];
-    const data = await response.json();
-    return data.data || [];
+    const fields = "message,created_time";
+    const url = `https://graph.facebook.com/${version}/${encodeURIComponent(pageId)}/posts?fields=${encodeURIComponent(fields)}&limit=15&access_token=${encodeURIComponent(token)}`;
+    const r = await fetch(url, { cache: "no-store" });
+    if (!r.ok) return [];
+    const j = await r.json();
+    return j.data || [];
   } catch { return []; }
 }
 
 export async function POST(req: NextRequest) {
   try {
-    const user = await verifyUser(req);
+    const user = await userFrom(req);
     if (!user) return NextResponse.json({ error: "Your login session could not be verified. Please sign out and sign back in." }, { status: 401 });
     const { objective, audience, offer, notes } = await req.json();
     if (!process.env.OPENAI_API_KEY) return NextResponse.json({ error: "OPENAI_API_KEY is missing in Vercel." }, { status: 500 });
 
-    const posts = await recentPagePosts();
-    const recent = posts.length
-      ? posts.map((p:any,i:number)=>`${i+1}. ${p.created_time}: ${p.message || "(post without text)"}`).join("\n")
-      : "No recent Page posts were available.";
+    const fb = await recentFacebookPosts();
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+    const key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!;
+    const supabase = createClient(url, key, { global: { headers: { Authorization: req.headers.get("authorization") ?? "" } } });
+    const { data: saved } = await supabase.from("campaigns").select("title,facebook_post,content,created_at").order("created_at", { ascending: false }).limit(20);
+
+    const context = [
+      "RECENT FACEBOOK POSTS:",
+      ...(fb.length ? fb.map((p:any,i:number)=>`${i+1}. ${p.created_time}: ${p.message || "(no text)"}`) : ["None available"]),
+      "RECENT SAVED CAMPAIGNS:",
+      ...((saved || []).length ? (saved || []).map((c:any,i:number)=>`${i+1}. ${c.created_at}: ${c.title} — ${c.facebook_post || c.content}`) : ["None saved"])
+    ].join("\n");
 
     const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
     const response = await client.responses.create({
       model: process.env.OPENAI_MODEL || "gpt-5-mini",
-      instructions: prompt,
-      input: `Create a complete Facebook campaign draft.\n\nObjective: ${objective}\nAudience: ${audience}\nOffer/message: ${offer}\nOwner notes: ${notes || "None"}\n\nRecent Ma's Helping Hand Facebook posts:\n${recent}\n\nReturn these exact sections:\n1. Campaign name\n2. Objective\n3. Audience\n4. Primary Facebook copy\n5. Headline\n6. Description\n7. Call to action\n8. Branded image brief\n9. Suggested posting time\n10. Optional paid budget and duration\n11. Website support suggestion\n12. Measurement plan\n13. Duplicate-content check explaining whether the topic, hook or wording overlaps with recent posts\n14. Compliance check confirming no insurance claim, correct phone number, correct website and Australian spelling.`
+      instructions: BUSINESS,
+      input: `Create a new Facebook campaign.\nObjective: ${objective}\nAudience: ${audience}\nOffer/message: ${offer}\nOwner notes: ${notes || "None"}\n\n${context}\n\nReturn ONLY valid JSON with exactly these keys: campaign_name, objective, audience, facebook_post, headline, description, call_to_action, image_brief, posting_time, paid_budget, website_support, measurement_plan, duplicate_warning, compliance_check. compliance_check must contain insurance_claim, phone_correct, website_correct, australian_spelling.`
     });
-    return NextResponse.json({ text: response.output_text, recentPostsUsed: posts.length });
+    let campaign;
+    try { campaign = JSON.parse(response.output_text); }
+    catch { return NextResponse.json({ error: "The AI returned an invalid campaign format. Generate again." }, { status: 502 }); }
+    return NextResponse.json({ campaign, recentPostsUsed: fb.length, savedCampaignsUsed: (saved || []).length });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Unexpected server error." }, { status: 500 });
   }
