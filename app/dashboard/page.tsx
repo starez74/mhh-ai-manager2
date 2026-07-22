@@ -34,6 +34,11 @@ export default function Dashboard(){
  const [metaConnected,setMetaConnected]=useState(false);
  const [metaLoading,setMetaLoading]=useState(false);
  const [lastSync,setLastSync]=useState("");
+ const [metaStatus,setMetaStatus]=useState("");
+ const [metaPageName,setMetaPageName]=useState("");
+ const [metaPageLink,setMetaPageLink]=useState("");
+ const [metaGraphVersion,setMetaGraphVersion]=useState("");
+ const [metaPostsReadable,setMetaPostsReadable]=useState(false);
  const [customerForm,setCustomerForm]=useState({name:"",phone:"",email:"",preferred_contact:"phone",address:"",notes:""});
  const [search,setSearch]=useState("");
  const [showArchived,setShowArchived]=useState(false);
@@ -54,7 +59,29 @@ export default function Dashboard(){
  async function loadJobs(){const {data}=await supabase.from('jobs').select('*').order('scheduled_start',{ascending:true});setJobs(data||[])}
  async function loadActivities(){const {data}=await supabase.from('activity_events').select('*').order('created_at',{ascending:false}).limit(500);setActivities(data||[])}
  async function logActivity(values:Partial<Activity>){await supabase.from('activity_events').insert({user_id:userId,event_type:values.event_type||'update',title:values.title||'Updated',details:values.details||'',enquiry_id:values.enquiry_id||null,quote_id:values.quote_id||null,job_id:values.job_id||null});await loadActivities()}
- async function syncFacebook(){setMetaLoading(true);const {data}=await supabase.auth.getSession();const token=data.session?.access_token;if(!token){setMetaLoading(false);return}const r=await fetch('/api/meta',{headers:{Authorization:`Bearer ${token}`}});const j=await r.json();setMetaLoading(false);setLastSync(j.syncedAt||new Date().toISOString());if(r.ok){setMetaConnected(Boolean(j.connected));setMetaPosts(j.posts||[])}}
+ async function syncFacebook(){
+   setMetaLoading(true);setMetaStatus('');
+   const {data}=await supabase.auth.getSession();
+   const token=data.session?.access_token;
+   if(!token){setMetaLoading(false);setMetaConnected(false);setMetaStatus('No active login session.');return}
+   try{
+     const r=await fetch('/api/meta',{headers:{Authorization:`Bearer ${token}`},cache:'no-store'});
+     const j=await r.json();
+     setLastSync(j.syncedAt||new Date().toISOString());
+     setMetaConnected(Boolean(j.connected));
+     setMetaPostsReadable(Boolean(j.postsReadable));
+     setMetaPosts(j.posts||[]);
+     setMetaPageName(j.pageName||'');
+     setMetaPageLink(j.pageLink||'');
+     setMetaGraphVersion(j.graphVersion||'');
+     setMetaStatus(j.message||j.error||(r.ok?'Facebook check completed.':'Facebook check failed.'));
+   }catch(error){
+     setMetaConnected(false);setMetaPostsReadable(false);setMetaPosts([]);
+     setMetaStatus(error instanceof Error?error.message:'Facebook check failed.');
+   }finally{
+     setMetaLoading(false);
+   }
+ }
  async function setEnquiryStatus(id:string,status:string){const {error}=await supabase.from('enquiries').update({status,updated_at:new Date().toISOString()}).eq('id',id);if(error){setMessage(error.message);return}await logActivity({enquiry_id:id,event_type:'enquiry_status',title:`Enquiry marked ${status}`});await loadEnquiries();if(selected?.id===id)setSelected({...selected,status});}
  async function setFollowUp(id:string,value:string){const follow_up_at=value?new Date(value).toISOString():null;const {error}=await supabase.from('enquiries').update({follow_up_at}).eq('id',id);if(error){setMessage(error.message);return}await logActivity({enquiry_id:id,event_type:'follow_up',title:'Follow-up updated',details:value||'Follow-up cleared'});await loadEnquiries();}
  async function convertToCustomer(e:Enquiry){
@@ -170,7 +197,7 @@ export default function Dashboard(){
  const relevantActivity=(enquiryId?:string,quoteId?:string,jobId?:string)=>activities.filter(a=>(enquiryId&&a.enquiry_id===enquiryId)||(quoteId&&a.quote_id===quoteId)||(jobId&&a.job_id===jobId)).slice(0,20);
 
  return <div className="shell">
-  <aside className="sidebar"><h2 className="brand">MHH AI Manager</h2><div className="tagline">FROM OUR HANDS TO YOUR HOME</div><div className="nav">{([['dashboard','Dashboard'],['enquiries','Enquiries'],['quotes','Quotes'],['jobs','Jobs'],['customers','Customers'],['receptionist','AI Receptionist'],['marketing','Marketing'],['facebook','Facebook'],['settings','Settings']] as [View,string][]).map(([id,label])=><button key={id} className={view===id?'active':''} onClick={()=>{setView(id);setMessage('')}}>{label}</button>)}</div><div className="muted version">Version 5.1.0</div></aside>
+  <aside className="sidebar"><h2 className="brand">MHH AI Manager</h2><div className="tagline">FROM OUR HANDS TO YOUR HOME</div><div className="nav">{([['dashboard','Dashboard'],['enquiries','Enquiries'],['quotes','Quotes'],['jobs','Jobs'],['customers','Customers'],['receptionist','AI Receptionist'],['marketing','Marketing'],['facebook','Facebook'],['settings','Settings']] as [View,string][]).map(([id,label])=><button key={id} className={view===id?'active':''} onClick={()=>{setView(id);setMessage('')}}>{label}</button>)}</div><div className="muted version">Version 5.1.1</div></aside>
   <main className="main"><div className="top"><div><h1>MHH AI Business Manager</h1><div className="muted">Enquiry → quote → booking → job completion</div></div><div className="pill">{newLeads} new · {openQuotes} open quotes · {upcomingJobs} upcoming jobs</div></div>
   {message&&<div className="notice">{message}</div>}
 
@@ -201,9 +228,9 @@ export default function Dashboard(){
 
   <section className={view==='marketing'?'view active':'view'}><div className="card"><h3>Marketing Module</h3><p>Saved campaigns: <strong>{campaigns.length}</strong></p>{campaigns.slice(0,8).map(c=><div className="campaign" key={c.id}><strong>{c.title}</strong><span className="badge" style={{marginLeft:10}}>{c.status}</span><div className="result" style={{marginTop:10}}>{c.facebook_post||c.content}</div></div>)}</div></section>
 
-  <section className={view==='facebook'?'view active':'view'}><div className="grid two"><div className="card"><h3>Facebook Connection</h3><p>Read access: <strong className={metaConnected?'success':'error'}>{metaConnected?'Connected':'Not connected'}</strong></p><p>Last sync: {lastSync?new Date(lastSync).toLocaleString('en-AU'):'Never'}</p><button className="btn" disabled={metaLoading} onClick={syncFacebook}>{metaLoading?'Syncing…':'Refresh Facebook Posts'}</button></div><div className="card"><h3>Recent Page Posts</h3>{metaPosts.map((p:any)=><div className="campaign" key={p.id}><div className="muted">{new Date(p.created_time).toLocaleString('en-AU')}</div><p>{p.message||'(Post without text)'}</p></div>)}</div></div></section>
+  <section className={view==='facebook'?'view active':'view'}><div className="grid two"><div className="card"><h3>Facebook Connection Diagnostic</h3><p>Overall connection: <strong className={metaConnected?'success':'error'}>{metaConnected?'Connected':'Not connected'}</strong></p><p>Recent-post access: <strong className={metaPostsReadable?'success':'error'}>{metaPostsReadable?'Working':'Not verified'}</strong></p><p>Configured Page: <strong>{metaPageName||'Not verified'}</strong></p>{metaPageLink&&<p><a href={metaPageLink} target="_blank" rel="noreferrer">Open connected Facebook Page</a></p>}<p>Graph API setting: <strong>{metaGraphVersion||'Not reported'}</strong></p><p>Last check: {lastSync?new Date(lastSync).toLocaleString('en-AU'):'Never'}</p>{metaStatus&&<div className={metaConnected?'notice':'notice diagnosticError'}><strong>{metaConnected?'Check passed':'Check result'}</strong><br/>{metaStatus}</div>}<button className="btn" disabled={metaLoading} onClick={syncFacebook}>{metaLoading?'Checking…':'Run Facebook Connection Check'}</button></div><div className="card"><div className="sectionHead"><h3>Recent Page Posts</h3><span className="badge">{metaPosts.length} loaded</span></div>{metaPosts.map((p:any)=><div className="campaign" key={p.id}><div className="muted">{new Date(p.created_time).toLocaleString('en-AU')}</div><p>{p.message||'(Post without text)'}</p>{p.permalink_url&&<a href={p.permalink_url} target="_blank" rel="noreferrer">Open post on Facebook</a>}</div>)}{!metaPosts.length&&<p className="muted">Run the connection check to load recent posts.</p>}</div></div></section>
 
-  <section className={view==='settings'?'view active':'view'}><div className="card"><h3>System</h3><p>Application version: <strong>5.1.0</strong></p><p>Operational tables: <strong className="success">enquiries + customers + quotes + jobs + activity</strong></p><p>Quote AI: <strong className="success">Owner-controlled pricing</strong></p><div className="notice">Run supabase/v5.1-migration.sql before using archive or restore.</div><button className="btn danger" onClick={signOut}>Sign out</button></div></section>
+  <section className={view==='settings'?'view active':'view'}><div className="card"><h3>System</h3><p>Application version: <strong>5.1.1</strong></p><p>Operational tables: <strong className="success">enquiries + customers + quotes + jobs + activity</strong></p><p>Quote AI: <strong className="success">Owner-controlled pricing</strong></p><div className="notice">Run supabase/v5.1-migration.sql before using archive or restore.</div><button className="btn danger" onClick={signOut}>Sign out</button></div></section>
   </main>
  </div>
 }

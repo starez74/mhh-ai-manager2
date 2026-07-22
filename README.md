@@ -1,25 +1,34 @@
-# MHH AI Business Manager v5.1
+# MHH AI Business Manager v5.1.1
 
-This release adds safe record removal throughout the operational workflow.
+Facebook connection diagnostic update.
 
-## New controls
+## What changed
 
-- Archive enquiries, quotes, jobs and customers.
-- View archived records separately.
-- Restore archived records.
-- Permanently delete records after typing `DELETE`.
-- Quote deletion is blocked while a linked job exists.
-- Deleting a job leaves its quote and enquiry intact.
-- Deleting an enquiry does not automatically delete its quote or job.
-- Completed jobs can be archived while preserving history.
+- Verifies that the configured Page ID and token can identify the Page.
+- Displays the exact connected Page name.
+- Separately verifies recent-post access.
+- Shows Meta's real error message, error code and subcode when available.
+- Shows the configured Graph API version.
+- Adds links to the connected Page and individual posts.
+- Does not display or expose the Page access token.
 
-## Upgrade
+## Deployment
 
-1. Run `supabase/v5.1-migration.sql` in Supabase SQL Editor.
-2. Replace the existing project files with this release.
-3. Commit and push to GitHub.
-4. Wait for Vercel deployment.
+No Supabase migration is required.
+
+Replace the existing project files, commit and push to GitHub.
 
 Suggested commit message:
 
-`Add archive restore and permanent delete controls`
+`Add Facebook connection diagnostics`
+
+After deployment:
+
+1. Sign in.
+2. Open **Facebook**.
+3. Click **Run Facebook Connection Check**.
+4. A successful result will show:
+   - Overall connection: Connected
+   - Recent-post access: Working
+   - Configured Page: Ma's Helping Hand
+   - Recent posts loaded
