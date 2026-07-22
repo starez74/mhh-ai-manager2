@@ -42,3 +42,34 @@ Redeploy in Vercel after adding the variables.
 Do not expose the Supabase service-role key.
 Do not place API keys in GitHub.
 Facebook publishing and GitHub editing remain disabled until separately authorised.
+
+
+# v2.1 Facebook Integration
+
+## Features
+- Test Facebook Page connection
+- Read the ten most recent Page posts
+- Display recent content in the dashboard
+- Publish only campaigns marked Approved
+- Publishing disabled by default
+- Page token remains server-side in Vercel
+
+## Required Meta variables
+- META_PAGE_ID
+- META_PAGE_ACCESS_TOKEN
+- META_GRAPH_API_VERSION = v25.0
+- META_PUBLISHING_ENABLED = false
+
+Leave META_PUBLISHING_ENABLED set to false until:
+1. the connection test works,
+2. recent posts load,
+3. you have reviewed the permissions,
+4. you deliberately decide to enable publishing.
+
+## Meta permissions generally required
+For Page reading and publishing, the Meta app/token normally needs the relevant Page permissions such as:
+- pages_show_list
+- pages_read_engagement
+- pages_manage_posts
+
+Meta may require app review and business verification for production use.
