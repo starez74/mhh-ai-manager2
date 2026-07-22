@@ -10,7 +10,8 @@ type Quote={id:string;created_at:string;archived_at?:string|null;quote_number:st
 type Job={id:string;created_at:string;archived_at?:string|null;job_number:string;status:string;quote_id?:string;enquiry_id?:string;customer_id?:string;customer_name:string;phone:string;email:string;scheduled_start?:string;scheduled_end?:string;pickup_address:string;delivery_address:string;pickup_suburb:string;delivery_suburb:string;crew:string;vehicle:string;scope_summary:string;special_instructions:string;quoted_amount?:number;paid_amount:number};
 type Activity={id:string;created_at:string;enquiry_id?:string;quote_id?:string;job_id?:string;event_type:string;title:string;details:string};
 type QuoteDraft={scope_summary:string;risk_flags:string;missing_information:string;draft_message:string;suggested_follow_up:string};
-type View="dashboard"|"enquiries"|"quotes"|"jobs"|"customers"|"receptionist"|"marketing"|"facebook"|"settings";
+type View="dashboard"|"enquiries"|"quotes"|"jobs"|"customers"|"receptionist"|"marketing"|"facebook"|"connections"|"settings";
+type HealthCheck={key:string;label:string;status:"healthy"|"warning"|"error";message:string;checkedAt:string};
 
 const money=(value?:number)=>value==null||Number.isNaN(Number(value))?"Not set":new Intl.NumberFormat("en-AU",{style:"currency",currency:"AUD"}).format(Number(value));
 const localInput=(iso?:string)=>iso?new Date(iso).toISOString().slice(0,16):"";
@@ -39,6 +40,8 @@ export default function Dashboard(){
  const [metaPageLink,setMetaPageLink]=useState("");
  const [metaGraphVersion,setMetaGraphVersion]=useState("");
  const [metaPostsReadable,setMetaPostsReadable]=useState(false);
+ const [healthChecks,setHealthChecks]=useState<HealthCheck[]>([]);
+ const [healthLoading,setHealthLoading]=useState(false);
  const [customerForm,setCustomerForm]=useState({name:"",phone:"",email:"",preferred_contact:"phone",address:"",notes:""});
  const [search,setSearch]=useState("");
  const [showArchived,setShowArchived]=useState(false);
@@ -50,7 +53,7 @@ export default function Dashboard(){
  const [quoteNotes,setQuoteNotes]=useState("");
  const [jobForm,setJobForm]=useState({scheduled_start:"",scheduled_end:"",pickup_address:"",delivery_address:"",crew:"",vehicle:"",special_instructions:""});
 
- useEffect(()=>{(async()=>{const {data}=await supabase.auth.getSession();if(!data.session){router.replace('/login');return}setUserId(data.session.user.id);await Promise.all([loadAll(),syncFacebook()]);})();},[]);
+ useEffect(()=>{(async()=>{const {data}=await supabase.auth.getSession();if(!data.session){router.replace('/login');return}setUserId(data.session.user.id);await Promise.all([loadAll(),syncFacebook(),runHealthChecks()]);})();},[]);
  async function loadAll(){await Promise.all([loadCampaigns(),loadCustomers(),loadEnquiries(),loadQuotes(),loadJobs(),loadActivities()])}
  async function loadCampaigns(){const {data}=await supabase.from('campaigns').select('*').order('created_at',{ascending:false});setCampaigns(data||[])}
  async function loadCustomers(){const {data}=await supabase.from('customers').select('*').order('created_at',{ascending:false});setCustomers(data||[])}
@@ -184,6 +187,26 @@ export default function Dashboard(){
    if(error){setMessage(error.message);return}
    await loadJobs();setSelectedJob({...j,[field]:finalValue});
  }
+ async function runHealthChecks(){
+   setHealthLoading(true);
+   const {data}=await supabase.auth.getSession();
+   const token=data.session?.access_token;
+   if(!token){setHealthLoading(false);return}
+   try{
+     const r=await fetch('/api/health',{headers:{Authorization:`Bearer ${token}`},cache:'no-store'});
+     const j=await r.json();
+     if(!r.ok){setMessage(j.error||'Connection check failed.');return}
+     setHealthChecks(j.checks||[]);
+   }catch(error){
+     setMessage(error instanceof Error?error.message:'Connection check failed.');
+   }finally{
+     setHealthLoading(false);
+   }
+ }
+ async function runAllConnectionChecks(){
+   setMessage('');
+   await Promise.all([runHealthChecks(),syncFacebook()]);
+ }
  async function signOut(){await supabase.auth.signOut();router.replace('/login')}
 
  const newLeads=enquiries.filter(e=>!e.archived_at&&e.status==='new').length;
@@ -197,7 +220,7 @@ export default function Dashboard(){
  const relevantActivity=(enquiryId?:string,quoteId?:string,jobId?:string)=>activities.filter(a=>(enquiryId&&a.enquiry_id===enquiryId)||(quoteId&&a.quote_id===quoteId)||(jobId&&a.job_id===jobId)).slice(0,20);
 
  return <div className="shell">
-  <aside className="sidebar"><h2 className="brand">MHH AI Manager</h2><div className="tagline">FROM OUR HANDS TO YOUR HOME</div><div className="nav">{([['dashboard','Dashboard'],['enquiries','Enquiries'],['quotes','Quotes'],['jobs','Jobs'],['customers','Customers'],['receptionist','AI Receptionist'],['marketing','Marketing'],['facebook','Facebook'],['settings','Settings']] as [View,string][]).map(([id,label])=><button key={id} className={view===id?'active':''} onClick={()=>{setView(id);setMessage('')}}>{label}</button>)}</div><div className="muted version">Version 5.1.1</div></aside>
+  <aside className="sidebar"><h2 className="brand">MHH AI Manager</h2><div className="tagline">FROM OUR HANDS TO YOUR HOME</div><div className="nav">{([['dashboard','Dashboard'],['enquiries','Enquiries'],['quotes','Quotes'],['jobs','Jobs'],['customers','Customers'],['receptionist','AI Receptionist'],['marketing','Marketing'],['facebook','Facebook'],['connections','Connections'],['settings','Settings']] as [View,string][]).map(([id,label])=><button key={id} className={view===id?'active':''} onClick={()=>{setView(id);setMessage('')}}>{label}</button>)}</div><div className="muted version">Version 5.2.0</div></aside>
   <main className="main"><div className="top"><div><h1>MHH AI Business Manager</h1><div className="muted">Enquiry → quote → booking → job completion</div></div><div className="pill">{newLeads} new · {openQuotes} open quotes · {upcomingJobs} upcoming jobs</div></div>
   {message&&<div className="notice">{message}</div>}
 
@@ -230,9 +253,25 @@ export default function Dashboard(){
 
   <section className={view==='facebook'?'view active':'view'}><div className="grid two"><div className="card"><h3>Facebook Connection Diagnostic</h3><p>Overall connection: <strong className={metaConnected?'success':'error'}>{metaConnected?'Connected':'Not connected'}</strong></p><p>Recent-post access: <strong className={metaPostsReadable?'success':'error'}>{metaPostsReadable?'Working':'Not verified'}</strong></p><p>Configured Page: <strong>{metaPageName||'Not verified'}</strong></p>{metaPageLink&&<p><a href={metaPageLink} target="_blank" rel="noreferrer">Open connected Facebook Page</a></p>}<p>Graph API setting: <strong>{metaGraphVersion||'Not reported'}</strong></p><p>Last check: {lastSync?new Date(lastSync).toLocaleString('en-AU'):'Never'}</p>{metaStatus&&<div className={metaConnected?'notice':'notice diagnosticError'}><strong>{metaConnected?'Check passed':'Check result'}</strong><br/>{metaStatus}</div>}<button className="btn" disabled={metaLoading} onClick={syncFacebook}>{metaLoading?'Checking…':'Run Facebook Connection Check'}</button></div><div className="card"><div className="sectionHead"><h3>Recent Page Posts</h3><span className="badge">{metaPosts.length} loaded</span></div>{metaPosts.map((p:any)=><div className="campaign" key={p.id}><div className="muted">{new Date(p.created_time).toLocaleString('en-AU')}</div><p>{p.message||'(Post without text)'}</p>{p.permalink_url&&<a href={p.permalink_url} target="_blank" rel="noreferrer">Open post on Facebook</a>}</div>)}{!metaPosts.length&&<p className="muted">Run the connection check to load recent posts.</p>}</div></div></section>
 
-  <section className={view==='settings'?'view active':'view'}><div className="card"><h3>System</h3><p>Application version: <strong>5.1.1</strong></p><p>Operational tables: <strong className="success">enquiries + customers + quotes + jobs + activity</strong></p><p>Quote AI: <strong className="success">Owner-controlled pricing</strong></p><div className="notice">Run supabase/v5.1-migration.sql before using archive or restore.</div><button className="btn danger" onClick={signOut}>Sign out</button></div></section>
+  <section className={view==='connections'?'view active':'view'}>
+   <div className="sectionHead"><div><h2>Connection Centre</h2><p className="muted">Live health checks for services used by MHH AI Business Manager.</p></div><button className="btn" disabled={healthLoading||metaLoading} onClick={runAllConnectionChecks}>{healthLoading||metaLoading?'Checking…':'Run all checks'}</button></div>
+   <div className="grid two">
+    <ConnectionCard label="Facebook" status={metaConnected&&metaPostsReadable?'healthy':'error'} message={metaStatus||'Run the Facebook check.'} details={[metaPageName?`Page: ${metaPageName}`:'Page not verified',metaGraphVersion?`Graph API: ${metaGraphVersion}`:'Graph API not reported',lastSync?`Checked: ${new Date(lastSync).toLocaleString('en-AU')}`:'Not checked yet']} />
+    {healthChecks.map(check=><ConnectionCard key={check.key} label={check.label} status={check.status} message={check.message} details={[`Checked: ${new Date(check.checkedAt).toLocaleString('en-AU')}`]} />)}
+    <ConnectionCard label="Instagram" status="warning" message="The Instagram account is assigned in Meta, but Instagram API access is not configured in this application yet." details={["Planned integration"]} />
+    <ConnectionCard label="Email delivery" status="warning" message="The application currently opens email and SMS drafts rather than sending through a dedicated delivery provider." details={["Manual send remains enabled"]} />
+   </div>
+   <div className="card" style={{marginTop:18}}><h3>Security</h3><div className="notice">Tokens and API keys are checked securely on the server and are never displayed by this screen.</div></div>
+  </section>
+
+  <section className={view==='settings'?'view active':'view'}><div className="card"><h3>System</h3><p>Application version: <strong>5.2.0</strong></p><p>Operational tables: <strong className="success">enquiries + customers + quotes + jobs + activity</strong></p><p>Quote AI: <strong className="success">Owner-controlled pricing</strong></p><div className="notice">Run supabase/v5.1-migration.sql before using archive or restore.</div><button className="btn danger" onClick={signOut}>Sign out</button></div></section>
   </main>
  </div>
+}
+
+function ConnectionCard({label,status,message,details}:{label:string;status:"healthy"|"warning"|"error";message:string;details:string[]}){
+ const text=status==="healthy"?"Healthy":status==="warning"?"Not configured":"Needs attention";
+ return <div className={`card connectionCard ${status}`}><div className="sectionHead"><h3>{label}</h3><span className={`healthBadge ${status}`}>{text}</span></div><p>{message}</p>{details.map((detail,index)=><div className="muted" key={index}>{detail}</div>)}</div>
 }
 
 function Timeline({items}:{items:Activity[]}){

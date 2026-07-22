@@ -1,16 +1,15 @@
-# MHH AI Business Manager v5.1.1
+# MHH AI Business Manager v5.2
 
-Facebook connection diagnostic update.
+This release adds the Connection Centre.
 
-## What changed
+## New features
 
-- Verifies that the configured Page ID and token can identify the Page.
-- Displays the exact connected Page name.
-- Separately verifies recent-post access.
-- Shows Meta's real error message, error code and subcode when available.
-- Shows the configured Graph API version.
-- Adds links to the connected Page and individual posts.
-- Does not display or expose the Page access token.
+- Unified health checks for Facebook, Supabase, OpenAI and the MHH website.
+- Clear Healthy, Not configured and Needs attention states.
+- Facebook Page name, Graph API version and last-check time.
+- One-click Run all checks control.
+- Instagram and email-delivery readiness indicators.
+- API keys and access tokens are never displayed.
 
 ## Deployment
 
@@ -20,15 +19,12 @@ Replace the existing project files, commit and push to GitHub.
 
 Suggested commit message:
 
-`Add Facebook connection diagnostics`
+`Add connection centre and service health checks`
 
-After deployment:
+## Optional environment variable
 
-1. Sign in.
-2. Open **Facebook**.
-3. Click **Run Facebook Connection Check**.
-4. A successful result will show:
-   - Overall connection: Connected
-   - Recent-post access: Working
-   - Configured Page: Ma's Helping Hand
-   - Recent posts loaded
+The website check defaults to `https://mhhremoval.com.au`.
+
+To check a different site, add:
+
+`NEXT_PUBLIC_BUSINESS_WEBSITE`
