@@ -41,7 +41,7 @@ export async function POST(req: NextRequest) {
       auth: { persistSession: false, autoRefreshToken: false }
     });
 
-    const { data, error } = await supabase.from("enquiries").insert({
+    const { error } = await supabase.from("enquiries").insert({
       user_id: null,
       source: "website",
       status: "new",
@@ -59,10 +59,22 @@ export async function POST(req: NextRequest) {
       item_summary: text(body.item_summary, 1200),
       extra_notes: text(body.extra_notes, 1200),
       ai_summary: summary
-    }).select("id").single();
+    });
 
-    if (error) throw error;
-    return NextResponse.json({ ok: true, enquiryId: data.id });
+    if (error) {
+      console.error("Supabase enquiry insert failed:", {
+        code: error.code,
+        message: error.message,
+        details: error.details,
+        hint: error.hint
+      });
+      return NextResponse.json(
+        { error: error.message || "Unable to save enquiry." },
+        { status: 500 }
+      );
+    }
+
+    return NextResponse.json({ ok: true });
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Unable to submit enquiry." },
