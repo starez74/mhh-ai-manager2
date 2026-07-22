@@ -1,31 +1,25 @@
-# MHH AI Business Manager v5
+# MHH AI Business Manager v5.1
 
-This release adds the Quote & Job Engine.
+This release adds safe record removal throughout the operational workflow.
 
-## New workflow
+## New controls
 
-1. Website receptionist creates an enquiry.
-2. Open the enquiry and click **Generate quote**.
-3. The AI drafts the scope, risk flags, missing information and customer message.
-4. Mick enters the final price, deposit and validity date.
-5. Save and approve the quote.
-6. Convert the quote to a scheduled job.
-7. Update the job through booked, confirmed, in progress and completed.
-8. Every important change appears in the activity timeline.
+- Archive enquiries, quotes, jobs and customers.
+- View archived records separately.
+- Restore archived records.
+- Permanently delete records after typing `DELETE`.
+- Quote deletion is blocked while a linked job exists.
+- Deleting a job leaves its quote and enquiry intact.
+- Deleting an enquiry does not automatically delete its quote or job.
+- Completed jobs can be archived while preserving history.
 
-## Installation
+## Upgrade
 
-1. Open Supabase SQL Editor.
-2. Run `supabase/v5-migration.sql`.
-3. Replace the existing project files with this release.
-4. Commit and push to GitHub.
-5. Wait for Vercel to deploy.
+1. Run `supabase/v5.1-migration.sql` in Supabase SQL Editor.
+2. Replace the existing project files with this release.
+3. Commit and push to GitHub.
+4. Wait for Vercel deployment.
 
 Suggested commit message:
 
-`Add quote and job engine`
-
-## Important safety behaviour
-
-The AI does not set or promise a final price. Pricing remains owner-controlled.
-It does not claim the business is insured and does not promise availability.
+`Add archive restore and permanent delete controls`

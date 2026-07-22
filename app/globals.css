@@ -16,3 +16,8 @@ button,input,textarea,select{font:inherit}.serif,h1,h2,h3{font-family:Georgia,'T
 .timelineItem p{margin:6px 0 0}
 @media(max-width:1050px){.four{grid-template-columns:repeat(2,1fr)}}
 @media(max-width:700px){.four{grid-template-columns:1fr}}
+
+.listTools{display:flex;gap:10px;align-items:center;justify-content:flex-end;flex-wrap:wrap}
+.btn.small{padding:8px 11px;font-size:12px}
+.recordControls{display:flex;gap:10px;flex-wrap:wrap;margin-top:20px;padding-top:16px;border-top:1px solid rgba(215,169,65,.3)}
+.customerControls{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
