@@ -1,17 +1,32 @@
-# MHH AI Manager v3
+# MHH AI Business Manager v4
 
-## New in v3
-- Visible version number
-- Automatic Facebook sync after login
-- Refresh Facebook Posts button
-- Last sync timestamp
-- Recent Facebook posts and saved campaigns used as generation memory
-- Duplicate-content warning
-- Exact Facebook caption stored separately from internal strategy
-- Approval-gated publishing posts only the approved caption
+Version 4 adds the first operational business modules to the existing marketing manager.
 
-## Before deployment
-Run `supabase/v3-migration.sql` in Supabase SQL Editor.
+## New modules
 
-## Deploy
-Replace your existing repository files with this package, commit and push. Vercel will deploy automatically. Keep `META_PUBLISHING_ENABLED=false` until you intentionally test publishing.
+- Customer database
+- Website enquiry pipeline
+- Guided public removal quote receptionist at `/reception`
+- Lead status workflow: new, contacted, quoted, booked, closed or declined
+- Lead-to-customer conversion
+- Follow-up date tracking
+- Click-to-call and click-to-SMS actions
+- Dashboard alerts for new enquiries and follow-ups
+- Existing Facebook connection and campaign records retained
+
+## Upgrade steps
+
+1. Back up the existing GitHub repository.
+2. In Supabase, open SQL Editor.
+3. Run `supabase/v4-migration.sql` once.
+4. Replace the existing repository files with this package.
+5. Commit and push to GitHub.
+6. Allow Vercel to deploy.
+7. Open `/reception` and submit a test enquiry.
+8. Sign into the manager and confirm the test appears under Enquiries.
+
+## Important
+
+The receptionist does not automatically calculate or promise a price. It collects the information required for Mick to review and prepare a quote.
+
+No additional environment variables are required beyond the v3 configuration.

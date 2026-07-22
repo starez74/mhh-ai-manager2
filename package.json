@@ -1,6 +1,6 @@
 {
-  "name": "mhh-ai-manager-v2",
-  "version": "3.0.0",
+  "name": "mhh-ai-business-manager",
+  "version": "4.0.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
