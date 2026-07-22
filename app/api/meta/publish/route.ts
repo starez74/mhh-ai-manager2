@@ -66,7 +66,13 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const message = campaign.content;
+  const fullCampaign = campaign.content || "";
+  const match = fullCampaign.match(/4\.\s*Primary Facebook copy\s*\n([\s\S]*?)(?=\n5\.\s*Headline|$)/i);
+  const message = match ? match[1].trim() : fullCampaign.trim();
+
+  if (!message) {
+    return NextResponse.json({ error: "No Facebook caption was found in this campaign." }, { status: 400 });
+  }
   const response = await fetch(
     `https://graph.facebook.com/${version}/${encodeURIComponent(pageId)}/feed`,
     {

@@ -73,3 +73,11 @@ For Page reading and publishing, the Meta app/token normally needs the relevant 
 - pages_manage_posts
 
 Meta may require app review and business verification for production use.
+
+
+# v2.2 Facebook-aware generation
+
+- The AI now reads up to 15 recent Ma's Helping Hand Page posts before drafting.
+- Every campaign includes a duplicate-content check.
+- The Facebook publish endpoint extracts and publishes only section 4, Primary Facebook copy, rather than the internal campaign plan.
+- Keep META_PUBLISHING_ENABLED=false until several campaigns have been reviewed.
