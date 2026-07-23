@@ -131,10 +131,12 @@ export default function OperationsCalendar({
 
     try {
       await onSaveDispatch(job, {
+        crewId: job.crew_id ?? "",
+        crewName: job.crew,
+        vehicleId: job.vehicle_id ?? "",
+        vehicleName: job.vehicle,
         scheduledStart: localDateTime(new Date(scheduledStart)),
         scheduledEnd: localDateTime(new Date(scheduledEnd)),
-        crew: job.crew,
-        vehicle: job.vehicle,
       });
       setMessage(`${job.job_number} schedule updated.`);
     } catch (error) {
