@@ -1,16 +1,75 @@
-import OpenAI from "openai";
 import { browserSupabase } from "@/lib/supabase/browser";
-import { getServerConfig } from "@/lib/config";
 import type { Enquiry } from "@/lib/types/enquiry";
 import type { Quote, QuoteDraft } from "@/lib/types/quote";
+
+const quoteColumns =
+  "id,created_at,archived_at,quote_number,status,enquiry_id,customer_id,customer_name,phone,email,pickup_suburb,delivery_suburb,preferred_date,scope_summary,risk_flags,missing_information,draft_message,price_amount,deposit_amount,valid_until,internal_notes";
+
+export type CreateQuoteInput = {
+  userId: string;
+  enquiry: Enquiry;
+  draft: QuoteDraft;
+  quoteNumber: string;
+  priceAmount: number | null;
+  depositAmount: number | null;
+  validUntil: string | null;
+  internalNotes: string;
+};
+
+export type QuoteEditableField =
+  | "price_amount"
+  | "deposit_amount"
+  | "valid_until"
+  | "internal_notes"
+  | "draft_message";
 
 export async function listQuotes(): Promise<Quote[]> {
   const { data, error } = await browserSupabase
     .from("quotes")
-    .select("id,created_at,archived_at,quote_number,status,enquiry_id,customer_id,customer_name,phone,email,pickup_suburb,delivery_suburb,preferred_date,scope_summary,risk_flags,missing_information,draft_message,price_amount,deposit_amount,valid_until,internal_notes")
+    .select(quoteColumns)
     .order("created_at", { ascending: false });
+
   if (error) throw error;
   return data ?? [];
+}
+
+export async function createQuote(input: CreateQuoteInput): Promise<Quote> {
+  const { enquiry, draft } = input;
+  const { data, error } = await browserSupabase
+    .from("quotes")
+    .insert({
+      user_id: input.userId,
+      enquiry_id: enquiry.id,
+      customer_id: enquiry.customer_id || null,
+      quote_number: input.quoteNumber,
+      status: "draft",
+      customer_name: enquiry.customer_name,
+      phone: enquiry.phone,
+      email: enquiry.email || "",
+      pickup_suburb: enquiry.pickup_suburb,
+      delivery_suburb: enquiry.delivery_suburb,
+      preferred_date: enquiry.preferred_date || "",
+      scope_summary: draft.scope_summary,
+      risk_flags: draft.risk_flags,
+      missing_information: draft.missing_information,
+      draft_message: draft.draft_message,
+      price_amount: input.priceAmount,
+      deposit_amount: input.depositAmount,
+      valid_until: input.validUntil,
+      internal_notes: input.internalNotes,
+    })
+    .select(quoteColumns)
+    .single();
+
+  if (error) throw error;
+
+  const { error: enquiryError } = await browserSupabase
+    .from("enquiries")
+    .update({ status: "quoted", updated_at: new Date().toISOString() })
+    .eq("id", enquiry.id);
+
+  if (enquiryError) throw enquiryError;
+  return data;
 }
 
 export async function updateQuoteStatus(id: string, status: string): Promise<void> {
@@ -18,37 +77,19 @@ export async function updateQuoteStatus(id: string, status: string): Promise<voi
     .from("quotes")
     .update({ status, updated_at: new Date().toISOString() })
     .eq("id", id);
+
   if (error) throw error;
 }
 
 export async function updateQuoteField(
   id: string,
-  field: string,
-  value: unknown
+  field: QuoteEditableField,
+  value: string | number | null
 ): Promise<void> {
   const { error } = await browserSupabase
     .from("quotes")
     .update({ [field]: value, updated_at: new Date().toISOString() })
     .eq("id", id);
+
   if (error) throw error;
-}
-
-export async function generateQuoteDraft(enquiry: Enquiry): Promise<QuoteDraft> {
-  const config = getServerConfig();
-  const client = new OpenAI({ apiKey: config.openAiApiKey });
-  const response = await client.responses.create({
-    model: config.openAiModel,
-    instructions: `You are the private quote drafting assistant for Ma's Helping Hand, a furniture removals business in Nanango, Queensland.
-
-Use Australian English. Never invent a price. Never claim the business is insured. Never promise availability. Do not state that a quote is final. Analyse the enquiry and prepare a professional draft message for Mick to edit and approve.
-
-Return ONLY valid JSON with these keys: scope_summary, risk_flags, missing_information, draft_message, suggested_follow_up.`,
-    input: JSON.stringify(enquiry),
-  });
-
-  const parsed: unknown = JSON.parse(response.output_text);
-  if (!parsed || typeof parsed !== "object") {
-    throw new Error("The AI returned an invalid quote format.");
-  }
-  return parsed as QuoteDraft;
 }

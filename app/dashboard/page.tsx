@@ -9,12 +9,15 @@ import NeedsAttention from "@/components/dashboard/NeedsAttention";
 import UpcomingJobs from "@/components/dashboard/UpcomingJobs";
 import QuickActions from "@/components/dashboard/QuickActions";
 import { getBrowserSession, signOut as signOutUser } from "@/lib/services/authService";
-import { listCustomers } from "@/lib/services/customerService";
-import { listEnquiries } from "@/lib/services/enquiryService";
-import { listQuotes } from "@/lib/services/quoteService";
-import { listJobs } from "@/lib/services/jobService";
+import { convertEnquiryToCustomer, createCustomer, listCustomers } from "@/lib/services/customerService";
+import { listEnquiries, updateEnquiryFollowUp, updateEnquiryStatus } from "@/lib/services/enquiryService";
+import { createQuote, listQuotes, updateQuoteField as updateQuoteFieldService, updateQuoteStatus as updateQuoteStatusService } from "@/lib/services/quoteService";
+import { createJobFromQuote, listJobs, updateJobField as updateJobFieldService, updateJobStatus as updateJobStatusService } from "@/lib/services/jobService";
 import { listActivities, recordActivity } from "@/lib/services/activityService";
 import { calculateDashboardStats } from "@/lib/services/dashboardService";
+import { deleteRecord, setArchived } from "@/lib/services/recordService";
+import type { QuoteEditableField } from "@/lib/services/quoteService";
+import type { JobEditableField } from "@/lib/services/jobService";
 import type { Customer } from "@/lib/types/customer";
 import type { Enquiry } from "@/lib/types/enquiry";
 import type { Quote, QuoteDraft } from "@/lib/types/quote";
@@ -97,20 +100,18 @@ export default function Dashboard(){
      setMetaLoading(false);
    }
  }
- async function setEnquiryStatus(id:string,status:string){const {error}=await supabase.from('enquiries').update({status,updated_at:new Date().toISOString()}).eq('id',id);if(error){setMessage(error.message);return}await logActivity({enquiry_id:id,event_type:'enquiry_status',title:`Enquiry marked ${status}`});await loadEnquiries();if(selected?.id===id)setSelected({...selected,status});}
- async function setFollowUp(id:string,value:string){const follow_up_at=value?new Date(value).toISOString():null;const {error}=await supabase.from('enquiries').update({follow_up_at}).eq('id',id);if(error){setMessage(error.message);return}await logActivity({enquiry_id:id,event_type:'follow_up',title:'Follow-up updated',details:value||'Follow-up cleared'});await loadEnquiries();}
+ async function setEnquiryStatus(id:string,status:string){try{await updateEnquiryStatus(id,status);await logActivity({enquiry_id:id,event_type:'enquiry_status',title:`Enquiry marked ${status}`});await loadEnquiries();if(selected?.id===id)setSelected({...selected,status});}catch(error){setMessage(error instanceof Error?error.message:'Unable to update enquiry.');}}
+ async function setFollowUp(id:string,value:string){try{await updateEnquiryFollowUp(id,value);await logActivity({enquiry_id:id,event_type:'follow_up',title:'Follow-up updated',details:value||'Follow-up cleared'});await loadEnquiries();}catch(error){setMessage(error instanceof Error?error.message:'Unable to update follow-up.');}}
  async function convertToCustomer(e:Enquiry){
-   const {data,error}=await supabase.from('customers').insert({user_id:userId,name:e.customer_name,phone:e.phone,email:e.email||'',preferred_contact:e.preferred_contact||'phone',address:'',notes:e.ai_summary||e.extra_notes||'',status:'active'}).select('*').single();
-   if(error){setMessage(error.message);return}
-   await supabase.from('enquiries').update({customer_id:data.id,converted_at:new Date().toISOString(),status:e.status==='new'?'contacted':e.status}).eq('id',e.id);
-   await logActivity({enquiry_id:e.id,event_type:'customer_created',title:'Converted to customer',details:data.name});
-   setMessage(`${e.customer_name} added to Customers.`);await Promise.all([loadCustomers(),loadEnquiries()]);setSelected({...e,customer_id:data.id,status:e.status==='new'?'contacted':e.status});
+   try{
+     const customer=await convertEnquiryToCustomer(userId,e);
+     await logActivity({enquiry_id:e.id,event_type:'customer_created',title:'Converted to customer',details:customer.name});
+     setMessage(`${e.customer_name} added to Customers.`);await Promise.all([loadCustomers(),loadEnquiries()]);setSelected({...e,customer_id:customer.id,status:e.status==='new'?'contacted':e.status});
+   }catch(error){setMessage(error instanceof Error?error.message:'Unable to convert enquiry.');}
  }
- async function addCustomer(){if(!customerForm.name||!customerForm.phone){setMessage('Customer name and phone are required.');return}const {error}=await supabase.from('customers').insert({user_id:userId,...customerForm,status:'active'});if(error){setMessage(error.message);return}setCustomerForm({name:'',phone:'',email:'',preferred_contact:'phone',address:'',notes:''});setMessage('Customer saved.');await loadCustomers();}
+ async function addCustomer(){if(!customerForm.name||!customerForm.phone){setMessage('Customer name and phone are required.');return}try{await createCustomer(userId,customerForm);setCustomerForm({name:'',phone:'',email:'',preferred_contact:'phone',address:'',notes:''});setMessage('Customer saved.');await loadCustomers();}catch(error){setMessage(error instanceof Error?error.message:'Unable to save customer.');}}
  async function archiveRecord(table:'enquiries'|'quotes'|'jobs'|'customers',id:string,restore=false){
-   const archived_at=restore?null:new Date().toISOString();
-   const {error}=await supabase.from(table).update({archived_at}).eq('id',id);
-   if(error){setMessage(error.message);return}
+   try{await setArchived(table,id,restore)}catch(error){setMessage(error instanceof Error?error.message:'Unable to update record.');return}
    setMessage(restore?'Record restored.':'Record archived.');
    if(table==='enquiries'){setSelected(null);await loadEnquiries()}
    if(table==='quotes'){setSelectedQuote(null);await loadQuotes()}
@@ -124,8 +125,7 @@ export default function Dashboard(){
    }
    const typed=window.prompt(`Permanently delete ${label}? This cannot be undone. Type DELETE to continue.`);
    if(typed!=='DELETE')return;
-   const {error}=await supabase.from(table).delete().eq('id',id);
-   if(error){setMessage(error.message);return}
+   try{await deleteRecord(table,id)}catch(error){setMessage(error instanceof Error?error.message:'Unable to delete record.');return}
    setMessage(`${label} permanently deleted.`);
    if(table==='enquiries'){setSelected(null);await Promise.all([loadEnquiries(),loadActivities()])}
    if(table==='quotes'){setSelectedQuote(null);await Promise.all([loadQuotes(),loadActivities()])}
@@ -145,59 +145,46 @@ export default function Dashboard(){
  async function saveQuote(e:Enquiry){
    if(!quoteDraft){setMessage('Generate the quote draft first.');return}
    const quote_number=makeNumber('MHH-Q');
-   const {data,error}=await supabase.from('quotes').insert({
-     user_id:userId,enquiry_id:e.id,customer_id:e.customer_id||null,quote_number,status:'draft',
-     customer_name:e.customer_name,phone:e.phone,email:e.email||'',pickup_suburb:e.pickup_suburb,delivery_suburb:e.delivery_suburb,
-     preferred_date:e.preferred_date||'',scope_summary:quoteDraft.scope_summary,risk_flags:quoteDraft.risk_flags,
-     missing_information:quoteDraft.missing_information,draft_message:quoteDraft.draft_message,
-     price_amount:quotePrice?Number(quotePrice):null,deposit_amount:quoteDeposit?Number(quoteDeposit):null,
-     valid_until:quoteValidUntil||null,internal_notes:quoteNotes
-   }).select('*').single();
-   if(error){setMessage(error.message);return}
-   await supabase.from('enquiries').update({status:'quoted',updated_at:new Date().toISOString()}).eq('id',e.id);
-   await logActivity({enquiry_id:e.id,quote_id:data.id,event_type:'quote_created',title:`Quote ${quote_number} created`,details:quotePrice?`Price ${money(Number(quotePrice))}`:'Price not set'});
-   setMessage(`Quote ${quote_number} saved.`);setQuoteDraft(null);await Promise.all([loadQuotes(),loadEnquiries()]);setSelectedQuote(data);setView('quotes');
+   try{
+     const quote=await createQuote({
+       userId,
+       enquiry:e,
+       draft:quoteDraft,
+       quoteNumber:quote_number,
+       priceAmount:quotePrice?Number(quotePrice):null,
+       depositAmount:quoteDeposit?Number(quoteDeposit):null,
+       validUntil:quoteValidUntil||null,
+       internalNotes:quoteNotes,
+     });
+     await logActivity({enquiry_id:e.id,quote_id:quote.id,event_type:'quote_created',title:`Quote ${quote_number} created`,details:quotePrice?`Price ${money(Number(quotePrice))}`:'Price not set'});
+     setMessage(`Quote ${quote_number} saved.`);setQuoteDraft(null);await Promise.all([loadQuotes(),loadEnquiries()]);setSelectedQuote(quote);setView('quotes');
+   }catch(error){setMessage(error instanceof Error?error.message:'Unable to save quote.');}
  }
  async function updateQuoteStatus(q:Quote,status:string){
-   const {error}=await supabase.from('quotes').update({status,updated_at:new Date().toISOString()}).eq('id',q.id);
-   if(error){setMessage(error.message);return}
-   await logActivity({quote_id:q.id,enquiry_id:q.enquiry_id,event_type:'quote_status',title:`Quote marked ${status}`,details:q.quote_number});
-   await loadQuotes();setSelectedQuote({...q,status});
+   try{await updateQuoteStatusService(q.id,status);await logActivity({quote_id:q.id,enquiry_id:q.enquiry_id,event_type:'quote_status',title:`Quote marked ${status}`,details:q.quote_number});await loadQuotes();setSelectedQuote({...q,status});}
+   catch(error){setMessage(error instanceof Error?error.message:'Unable to update quote.');}
  }
- async function updateQuoteField(q:Quote,field:string,value:any){
-   const {error}=await supabase.from('quotes').update({[field]:value,updated_at:new Date().toISOString()}).eq('id',q.id);
-   if(error){setMessage(error.message);return}
-   await loadQuotes();setSelectedQuote({...q,[field]:value});
+ async function updateQuoteField(q:Quote,field:QuoteEditableField,value:string|number|null){
+   try{await updateQuoteFieldService(q.id,field,value);await loadQuotes();setSelectedQuote({...q,[field]:value});}
+   catch(error){setMessage(error instanceof Error?error.message:'Unable to update quote.');}
  }
  async function convertQuoteToJob(q:Quote){
    if(!jobForm.scheduled_start){setMessage('Set the scheduled start before creating the job.');return}
    const job_number=makeNumber('MHH-J');
-   const {data,error}=await supabase.from('jobs').insert({
-     user_id:userId,enquiry_id:q.enquiry_id||null,quote_id:q.id,customer_id:q.customer_id||null,job_number,status:'booked',
-     customer_name:q.customer_name,phone:q.phone,email:q.email||'',scheduled_start:new Date(jobForm.scheduled_start).toISOString(),
-     scheduled_end:jobForm.scheduled_end?new Date(jobForm.scheduled_end).toISOString():null,
-     pickup_address:jobForm.pickup_address,delivery_address:jobForm.delivery_address,pickup_suburb:q.pickup_suburb,
-     delivery_suburb:q.delivery_suburb,crew:jobForm.crew,vehicle:jobForm.vehicle,scope_summary:q.scope_summary,
-     special_instructions:jobForm.special_instructions,quoted_amount:q.price_amount||null,paid_amount:0
-   }).select('*').single();
-   if(error){setMessage(error.message);return}
-   await supabase.from('quotes').update({status:'accepted',updated_at:new Date().toISOString()}).eq('id',q.id);
-   if(q.enquiry_id)await supabase.from('enquiries').update({status:'booked',updated_at:new Date().toISOString()}).eq('id',q.enquiry_id);
-   await logActivity({job_id:data.id,quote_id:q.id,enquiry_id:q.enquiry_id,event_type:'job_created',title:`Job ${job_number} created`,details:`${q.pickup_suburb} to ${q.delivery_suburb}`});
-   setMessage(`Job ${job_number} created.`);setJobForm({scheduled_start:"",scheduled_end:"",pickup_address:"",delivery_address:"",crew:"",vehicle:"",special_instructions:""});
-   await Promise.all([loadJobs(),loadQuotes(),loadEnquiries()]);setSelectedJob(data);setView('jobs');
+   try{
+     const job=await createJobFromQuote({userId,quote:q,form:jobForm,jobNumber:job_number});
+     await logActivity({job_id:job.id,quote_id:q.id,enquiry_id:q.enquiry_id,event_type:'job_created',title:`Job ${job_number} created`,details:`${q.pickup_suburb} to ${q.delivery_suburb}`});
+     setMessage(`Job ${job_number} created.`);setJobForm({scheduled_start:"",scheduled_end:"",pickup_address:"",delivery_address:"",crew:"",vehicle:"",special_instructions:""});
+     await Promise.all([loadJobs(),loadQuotes(),loadEnquiries()]);setSelectedJob(job);setView('jobs');
+   }catch(error){setMessage(error instanceof Error?error.message:'Unable to create job.');}
  }
  async function updateJobStatus(j:Job,status:string){
-   const {error}=await supabase.from('jobs').update({status,updated_at:new Date().toISOString()}).eq('id',j.id);
-   if(error){setMessage(error.message);return}
-   await logActivity({job_id:j.id,quote_id:j.quote_id,enquiry_id:j.enquiry_id,event_type:'job_status',title:`Job marked ${status}`,details:j.job_number});
-   await loadJobs();setSelectedJob({...j,status});
+   try{await updateJobStatusService(j.id,status);await logActivity({job_id:j.id,quote_id:j.quote_id,enquiry_id:j.enquiry_id,event_type:'job_status',title:`Job marked ${status}`,details:j.job_number});await loadJobs();setSelectedJob({...j,status});}
+   catch(error){setMessage(error instanceof Error?error.message:'Unable to update job.');}
  }
- async function updateJobField(j:Job,field:string,value:any){
-   const finalValue=(field==='scheduled_start'||field==='scheduled_end')&&value?new Date(value).toISOString():value;
-   const {error}=await supabase.from('jobs').update({[field]:finalValue,updated_at:new Date().toISOString()}).eq('id',j.id);
-   if(error){setMessage(error.message);return}
-   await loadJobs();setSelectedJob({...j,[field]:finalValue});
+ async function updateJobField(j:Job,field:JobEditableField,value:string|number|null){
+   try{const finalValue=await updateJobFieldService(j.id,field,value);await loadJobs();setSelectedJob({...j,[field]:finalValue});}
+   catch(error){setMessage(error instanceof Error?error.message:'Unable to update job.');}
  }
  async function runHealthChecks(){
    setHealthLoading(true);

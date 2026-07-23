@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { authenticateRequest } from "@/lib/services/serverAuthService";
-import { generateQuoteDraft } from "@/lib/services/quoteService";
+import { generateQuoteDraft } from "@/lib/services/quoteGenerationService";
 import { apiError, apiSuccess, errorMessage } from "@/lib/api/responses";
 import type { Enquiry } from "@/lib/types/enquiry";
 
