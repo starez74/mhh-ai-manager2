@@ -55,3 +55,5 @@
 
 - Added create, edit, archive and restore workflows for crews and vehicles.
 - Added client-side validation and automatic resource refresh after mutations.
+
+- Added managed crew and vehicle selection to dispatch with overlap conflict checks.

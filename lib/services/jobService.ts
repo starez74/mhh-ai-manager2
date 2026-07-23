@@ -2,7 +2,7 @@ import { browserSupabase } from "@/lib/supabase/browser";
 import type { CreateJobInput, Job, JobEditableField } from "@/lib/types/job";
 
 const jobColumns =
-  "id,created_at,archived_at,job_number,status,quote_id,enquiry_id,customer_id,customer_name,phone,email,scheduled_start,scheduled_end,pickup_address,delivery_address,pickup_suburb,delivery_suburb,crew,vehicle,scope_summary,special_instructions,quoted_amount,paid_amount";
+  "id,created_at,archived_at,job_number,status,quote_id,enquiry_id,customer_id,customer_name,phone,email,scheduled_start,scheduled_end,pickup_address,delivery_address,pickup_suburb,delivery_suburb,crew,vehicle,crew_id,vehicle_id,scope_summary,special_instructions,quoted_amount,paid_amount";
 
 export async function listJobs(): Promise<Job[]> {
   const { data, error } = await browserSupabase

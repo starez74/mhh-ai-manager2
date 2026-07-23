@@ -37,3 +37,5 @@ The Operations Centre now provides day, week and month calendar views, drag-and-
 
 - [x] Crew and vehicle CRUD
 - [ ] Structured dispatch selectors and resource conflict detection
+
+- [x] Connect managed crew and vehicle records to dispatch assignments.

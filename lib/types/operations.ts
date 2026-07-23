@@ -5,14 +5,18 @@ export interface DispatchAssignmentResult {
   scheduled_end: string | null;
   crew: string;
   vehicle: string;
-};
+  crew_id: string | null;
+  vehicle_id: string | null;
+}
 
 export interface DispatchAssignmentInput {
-  crew: string;
-  vehicle: string;
+  crewId: string;
+  crewName: string;
+  vehicleId: string;
+  vehicleName: string;
   scheduledStart: string;
   scheduledEnd: string;
-};
+}
 
 export type OperationsSummary = {
   today: Job[];

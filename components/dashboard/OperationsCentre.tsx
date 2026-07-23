@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 import { filterOperationsJobs } from "@/lib/services/operationsService";
 import OperationsCalendar from "@/components/dashboard/OperationsCalendar";
 import type { Job } from "@/lib/types/job";
+import type { Crew } from "@/lib/types/crew";
+import type { Vehicle } from "@/lib/types/vehicle";
 import type {
   DispatchAssignmentInput,
   DispatchSummary,
@@ -16,6 +18,8 @@ type OperationsCentreProps = {
   jobs: Job[];
   dispatch: DispatchSummary;
   schedule: OperationsScheduleGroup[];
+  crews: Crew[];
+  vehicles: Vehicle[];
   onOpenJob: (job: Job) => void;
   onSaveDispatch: (
     job: Job,
@@ -46,6 +50,8 @@ export default function OperationsCentre({
   jobs,
   dispatch,
   schedule,
+  crews,
+  vehicles,
   onOpenJob,
   onSaveDispatch,
 }: OperationsCentreProps) {
@@ -58,8 +64,10 @@ export default function OperationsCentre({
   const [dispatchForm, setDispatchForm] = useState<DispatchAssignmentInput>({
     scheduledStart: "",
     scheduledEnd: "",
-    crew: "",
-    vehicle: "",
+    crewId: "",
+    crewName: "",
+    vehicleId: "",
+    vehicleName: "",
   });
   const [dispatchError, setDispatchError] = useState("");
   const [dispatchSaving, setDispatchSaving] = useState(false);
@@ -103,8 +111,10 @@ export default function OperationsCentre({
     setDispatchForm({
       scheduledStart: localInput(job.scheduled_start),
       scheduledEnd: localInput(job.scheduled_end),
-      crew: job.crew,
-      vehicle: job.vehicle,
+      crewId: job.crew_id ?? "",
+      crewName: job.crew,
+      vehicleId: job.vehicle_id ?? "",
+      vehicleName: job.vehicle,
     });
   }
 
@@ -327,31 +337,55 @@ export default function OperationsCentre({
             <div className="grid two">
               <div>
                 <label htmlFor="dispatch-crew">Crew *</label>
-                <input
+                <select
                   id="dispatch-crew"
-                  value={dispatchForm.crew}
-                  onChange={event =>
+                  value={dispatchForm.crewId}
+                  onChange={event => {
+                    const crew = crews.find(item => item.id === event.target.value);
                     setDispatchForm({
                       ...dispatchForm,
-                      crew: event.target.value,
-                    })
-                  }
-                  placeholder="Assigned crew"
-                />
+                      crewId: crew?.id ?? "",
+                      crewName: crew?.name ?? "",
+                    });
+                  }}
+                >
+                  <option value="">Select crew</option>
+                  {crews.filter(crew => crew.is_active).map(crew => (
+                    <option
+                      key={crew.id}
+                      value={crew.id}
+                      disabled={crew.availability_status !== "available" && crew.id !== dispatchJob.crew_id}
+                    >
+                      {crew.name} · {crew.availability_status.replace("_", " ")}
+                    </option>
+                  ))}
+                </select>
               </div>
               <div>
                 <label htmlFor="dispatch-vehicle">Vehicle *</label>
-                <input
+                <select
                   id="dispatch-vehicle"
-                  value={dispatchForm.vehicle}
-                  onChange={event =>
+                  value={dispatchForm.vehicleId}
+                  onChange={event => {
+                    const vehicle = vehicles.find(item => item.id === event.target.value);
                     setDispatchForm({
                       ...dispatchForm,
-                      vehicle: event.target.value,
-                    })
-                  }
-                  placeholder="Assigned vehicle"
-                />
+                      vehicleId: vehicle?.id ?? "",
+                      vehicleName: vehicle?.name ?? "",
+                    });
+                  }}
+                >
+                  <option value="">Select vehicle</option>
+                  {vehicles.filter(vehicle => vehicle.is_active).map(vehicle => (
+                    <option
+                      key={vehicle.id}
+                      value={vehicle.id}
+                      disabled={vehicle.availability_status !== "available" && vehicle.id !== dispatchJob.vehicle_id}
+                    >
+                      {vehicle.name} · {vehicle.registration || "No registration"} · {vehicle.availability_status.replace("_", " ")}
+                    </option>
+                  ))}
+                </select>
               </div>
             </div>
 

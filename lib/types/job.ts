@@ -18,6 +18,8 @@ export type Job = {
   delivery_suburb: string;
   crew: string;
   vehicle: string;
+  crew_id?: string | null;
+  vehicle_id?: string | null;
   scope_summary: string;
   special_instructions: string;
   quoted_amount?: number;

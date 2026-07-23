@@ -277,6 +277,8 @@ export default function Dashboard(){
     jobs={jobs}
     dispatch={dispatchSummary}
     schedule={operationsSchedule}
+    crews={crews}
+    vehicles={vehicles}
     onOpenJob={openOperationsJob}
     onSaveDispatch={saveDispatch}
    />
