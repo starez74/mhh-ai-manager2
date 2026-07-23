@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
-import KPIGrid from "@/components/dashboard/KPIGrid";
+import KPIGrid from "@/components/KPIGrid";
 
 type Campaign={id:string;created_at:string;title:string;facebook_post?:string;content:string;status:string};
 type Customer={id:string;created_at:string;archived_at?:string|null;name:string;phone:string;email:string;preferred_contact:string;address:string;notes:string;status:string};
