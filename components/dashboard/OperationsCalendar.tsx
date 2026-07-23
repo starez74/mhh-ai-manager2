@@ -132,9 +132,9 @@ export default function OperationsCalendar({
     try {
       await onSaveDispatch(job, {
         crewId: job.crew_id ?? "",
-        crewName: job.crew,
+        crewName: job.crew ?? "",
         vehicleId: job.vehicle_id ?? "",
-        vehicleName: job.vehicle,
+        vehicleName: job.vehicle ?? "",
         scheduledStart: localDateTime(new Date(scheduledStart)),
         scheduledEnd: localDateTime(new Date(scheduledEnd)),
       });
