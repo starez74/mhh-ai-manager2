@@ -39,3 +39,5 @@ The Operations Centre now provides day, week and month calendar views, drag-and-
 - [ ] Structured dispatch selectors and resource conflict detection
 
 - [x] Connect managed crew and vehicle records to dispatch assignments.
+
+- [x] Repair AI quote generation visibility and saved quote handoff.

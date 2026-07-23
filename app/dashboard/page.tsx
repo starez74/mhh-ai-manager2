@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import DashboardHeader from "@/components/dashboard/DashboardHeader";
@@ -78,6 +78,8 @@ export default function Dashboard(){
  const [search,setSearch]=useState("");
  const [showArchived,setShowArchived]=useState(false);
  const [quoteLoading,setQuoteLoading]=useState(false);
+ const [quoteSaving,setQuoteSaving]=useState(false);
+ const quoteWorkspaceRef=useRef<HTMLDivElement|null>(null);
  const [quoteDraft,setQuoteDraft]=useState<QuoteDraft|null>(null);
  const [quotePrice,setQuotePrice]=useState("");
  const [quoteDeposit,setQuoteDeposit]=useState("");
@@ -165,16 +167,28 @@ export default function Dashboard(){
 
  async function generateQuote(e:Enquiry){
    setQuoteLoading(true);setQuoteDraft(null);setMessage("");
-   const {data}=await supabase.auth.getSession();
-   const token=data.session?.access_token;
-   const r=await fetch('/api/quotes/generate',{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${token}`},body:JSON.stringify({enquiry:e})});
-   const j=await r.json();setQuoteLoading(false);
-   if(!r.ok){setMessage(j.error||'Quote generation failed.');return}
-   setQuoteDraft(j.quote);setQuotePrice("");setQuoteDeposit("");setQuoteNotes("");setQuoteValidUntil("");
+   try{
+     const {data}=await supabase.auth.getSession();
+     const token=data.session?.access_token;
+     if(!token)throw new Error("Your session has expired. Please sign in again.");
+     const r=await fetch('/api/quotes/generate',{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${token}`},body:JSON.stringify({enquiry:e})});
+     const j=await r.json().catch(()=>({}));
+     if(!r.ok)throw new Error(j.error||'Quote generation failed.');
+     if(!j.quote)throw new Error('The quote draft was not returned.');
+     setQuoteDraft(j.quote);setQuotePrice("");setQuoteDeposit("");setQuoteNotes("");setQuoteValidUntil("");
+     setMessage("AI quote draft generated. Review it below, then save the quote.");
+     window.setTimeout(()=>quoteWorkspaceRef.current?.scrollIntoView({behavior:"smooth",block:"start"}),0);
+   }catch(error){
+     setMessage(error instanceof Error?error.message:'Quote generation failed.');
+   }finally{
+     setQuoteLoading(false);
+   }
  }
  async function saveQuote(e:Enquiry){
    if(!quoteDraft){setMessage('Generate the quote draft first.');return}
+   if(quoteSaving)return;
    const quote_number=makeNumber('MHH-Q');
+   setQuoteSaving(true);
    try{
      const quote=await createQuote({
        userId,
@@ -189,6 +203,7 @@ export default function Dashboard(){
      await logActivity({enquiry_id:e.id,quote_id:quote.id,event_type:'quote_created',title:`Quote ${quote_number} created`,details:quotePrice?`Price ${money(Number(quotePrice))}`:'Price not set'});
      setMessage(`Quote ${quote_number} saved.`);setQuoteDraft(null);await Promise.all([loadQuotes(),loadEnquiries()]);setSelectedQuote(quote);setView('quotes');
    }catch(error){setMessage(error instanceof Error?error.message:'Unable to save quote.');}
+   finally{setQuoteSaving(false);}
  }
  async function updateQuoteStatus(q:Quote,status:string){
    try{await updateQuoteStatusService(q.id,status);await logActivity({quote_id:q.id,enquiry_id:q.enquiry_id,event_type:'quote_status',title:`Quote marked ${status}`,details:q.quote_number});await loadQuotes();setSelectedQuote({...q,status});}
@@ -297,7 +312,7 @@ export default function Dashboard(){
   </section>
 
   <section className={view==='enquiries'?'view active':'view'}><div className="grid two"><div className="card"><div className="sectionHead"><h3>Enquiry Pipeline</h3><div className="listTools"><button className="btn secondary small" onClick={()=>{setShowArchived(!showArchived);setSelected(null)}}>{showArchived?"Show active":"Show archived"}</button><input className="searchBox" placeholder="Search enquiries" value={search} onChange={e=>setSearch(e.target.value)}/></div></div>{filteredEnquiries.map(e=><button key={e.id} className={`leadRow ${selected?.id===e.id?'selected':''}`} onClick={()=>{setSelected(e);setQuoteDraft(null)}}><div><strong>{e.customer_name}</strong><span className="badge">{e.status}</span></div><span>{e.pickup_suburb} → {e.delivery_suburb}</span><span>{new Date(e.created_at).toLocaleString('en-AU')}</span></button>)}{!filteredEnquiries.length&&<p className="muted">No enquiries found.</p>}</div><div className="card">{!selected?<p className="muted">Select an enquiry to review it.</p>:<div><div className="sectionHead"><h3>{selected.customer_name}</h3><span className="badge">{selected.status}</span></div><p><strong>Phone:</strong> <a href={`tel:${selected.phone}`}>{selected.phone}</a></p><p><strong>Email:</strong> {selected.email||'Not supplied'}</p><div className="notice"><strong>Enquiry summary</strong><br/>{selected.ai_summary}</div><p><strong>Move:</strong> {selected.pickup_suburb} → {selected.delivery_suburb}</p><p><strong>Date:</strong> {selected.preferred_date||'Flexible / not supplied'}</p><p><strong>Property:</strong> {selected.property_size||'Not supplied'}</p><p><strong>Stairs:</strong> {selected.stairs} · <strong>Steep driveway:</strong> {selected.steep_driveway}</p><p><strong>Heavy items:</strong> {selected.heavy_items||'None listed'}</p><p><strong>Items:</strong> {selected.item_summary||'Not supplied'}</p><label>Status</label><select value={selected.status} onChange={e=>setEnquiryStatus(selected.id,e.target.value)}><option>new</option><option>contacted</option><option>quoted</option><option>booked</option><option>closed</option><option>declined</option></select><label>Follow-up date and time</label><input type="datetime-local" defaultValue={localInput(selected.follow_up_at)} onBlur={e=>setFollowUp(selected.id,e.target.value)}/><div className="actions"><a className="btn linkBtn" href={`tel:${selected.phone}`}>Call</a><a className="btn secondary linkBtn" href={`sms:${selected.phone}`}>SMS</a>{!selected.customer_id&&<button className="btn secondary" onClick={()=>convertToCustomer(selected)}>Convert to customer</button>}<button className="btn" onClick={()=>generateQuote(selected)} disabled={quoteLoading}>{quoteLoading?'Drafting…':'Generate quote'}</button></div><div className="recordControls">{selected.archived_at?<button className="btn secondary" onClick={()=>archiveRecord('enquiries',selected.id,true)}>Restore enquiry</button>:<button className="btn secondary" onClick={()=>archiveRecord('enquiries',selected.id)}>Archive enquiry</button>}<button className="btn danger" onClick={()=>permanentlyDelete('enquiries',selected.id,`enquiry for ${selected.customer_name}`)}>Delete permanently</button></div>
-       {quoteDraft&&<div className="quoteEditor"><h3>AI Quote Workspace</h3><div className="notice"><strong>Scope:</strong><br/>{quoteDraft.scope_summary}</div><p><strong>Risk flags:</strong> {quoteDraft.risk_flags}</p><p><strong>Missing information:</strong> {quoteDraft.missing_information}</p><label>Customer-facing draft</label><textarea value={quoteDraft.draft_message} onChange={e=>setQuoteDraft({...quoteDraft,draft_message:e.target.value})}/><div className="grid two"><div><label>Final price (AUD)</label><input type="number" min="0" step="0.01" value={quotePrice} onChange={e=>setQuotePrice(e.target.value)}/></div><div><label>Deposit (AUD)</label><input type="number" min="0" step="0.01" value={quoteDeposit} onChange={e=>setQuoteDeposit(e.target.value)}/></div></div><label>Valid until</label><input type="date" value={quoteValidUntil} onChange={e=>setQuoteValidUntil(e.target.value)}/><label>Internal notes</label><textarea value={quoteNotes} onChange={e=>setQuoteNotes(e.target.value)}/><button className="btn" onClick={()=>saveQuote(selected)}>Save quote</button></div>}
+       {quoteDraft&&<div className="quoteEditor" ref={quoteWorkspaceRef}><h3>AI Quote Workspace</h3><div className="notice"><strong>Draft ready.</strong><br/>Review the AI draft, add pricing details, then save it to Quotes.</div><div className="notice"><strong>Scope:</strong><br/>{quoteDraft.scope_summary}</div><p><strong>Risk flags:</strong> {quoteDraft.risk_flags}</p><p><strong>Missing information:</strong> {quoteDraft.missing_information}</p><label>Customer-facing draft</label><textarea value={quoteDraft.draft_message} onChange={e=>setQuoteDraft({...quoteDraft,draft_message:e.target.value})}/><div className="grid two"><div><label>Final price (AUD)</label><input type="number" min="0" step="0.01" value={quotePrice} onChange={e=>setQuotePrice(e.target.value)}/></div><div><label>Deposit (AUD)</label><input type="number" min="0" step="0.01" value={quoteDeposit} onChange={e=>setQuoteDeposit(e.target.value)}/></div></div><label>Valid until</label><input type="date" value={quoteValidUntil} onChange={e=>setQuoteValidUntil(e.target.value)}/><label>Internal notes</label><textarea value={quoteNotes} onChange={e=>setQuoteNotes(e.target.value)}/><button className="btn" onClick={()=>saveQuote(selected)} disabled={quoteSaving}>{quoteSaving?"Saving quote…":"Save quote"}</button></div>}
        <Timeline items={relevantActivity(selected.id)} />
       </div>}</div></div></section>
 
