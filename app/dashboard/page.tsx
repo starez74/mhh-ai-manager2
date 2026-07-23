@@ -284,6 +284,7 @@ export default function Dashboard(){
 
   <section className={view==='resources'?'view active':'view'}>
    <ResourceCentre
+    userId={userId}
     crews={crews}
     vehicles={vehicles}
     summary={resourceSummary}

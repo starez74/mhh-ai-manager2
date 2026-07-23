@@ -34,3 +34,6 @@ The Operations Centre now provides day, week and month calendar views, drag-and-
 - [ ] Structured scheduling assignments.
 - [ ] Availability and workload engine.
 - [ ] Resource conflict validation using stable resource IDs.
+
+- [x] Crew and vehicle CRUD
+- [ ] Structured dispatch selectors and resource conflict detection

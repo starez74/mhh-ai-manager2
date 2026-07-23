@@ -13,3 +13,12 @@ export type Crew = {
   availability_status: CrewAvailabilityStatus;
   is_active: boolean;
 };
+
+export type CrewInput = {
+  name: string;
+  contact_name: string;
+  phone: string;
+  email: string;
+  skills: string[];
+  availability_status: CrewAvailabilityStatus;
+};

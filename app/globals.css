@@ -99,3 +99,8 @@ button,input,textarea,select{font:inherit}.serif,h1,h2,h3{font-family:Georgia,'T
 .resourceRow:first-of-type{border-top:0}
 .resourceRowStatus{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
 @media(max-width:600px){.resourceRow{align-items:flex-start;flex-direction:column}.resourceRowStatus{justify-content:flex-start}}
+
+.resourceForm{margin:18px 0;padding:18px;border:1px solid rgba(215,169,65,.35);border-radius:12px;background:rgba(3,21,41,.52)}
+.resourceForm h4{margin:0 0 12px}.resourceSkills{margin-top:7px;font-size:12px;color:var(--gold2)}
+.resourceRowActions{display:grid;justify-items:end;gap:8px}.resourceRowActions .actions{margin-top:0;justify-content:flex-end}
+@media(max-width:600px){.resourceRowActions{justify-items:start}.resourceRowActions .actions{justify-content:flex-start}}

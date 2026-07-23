@@ -50,3 +50,8 @@
 - Added typed crew, vehicle and resource services.
 - Added a Resources dashboard view with availability summaries and empty, loading and error states.
 - Existing job crew and vehicle fields remain unchanged until scheduling integration is completed.
+
+## v6 Resource CRUD
+
+- Added create, edit, archive and restore workflows for crews and vehicles.
+- Added client-side validation and automatic resource refresh after mutations.
