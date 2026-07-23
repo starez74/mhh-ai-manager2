@@ -18,3 +18,5 @@
 ### Database
 
 - No schema or migration changes.
+
+- Consolidated reusable service input/editable-field types under `lib/types`, removed the unused duplicate root KPI grid, and eliminated an unnecessary dashboard date cast.

@@ -15,7 +15,7 @@ export default function UpcomingJobs({ jobs }: { jobs: Job[] }) {
           <div className="campaign" key={job.id}>
             <strong>{job.job_number}</strong>
             <p>{job.customer_name} · {job.pickup_suburb} → {job.delivery_suburb}</p>
-            <div className="muted">{new Date(job.scheduled_start as string).toLocaleString("en-AU")}</div>
+            <div className="muted">{job.scheduled_start ? new Date(job.scheduled_start).toLocaleString("en-AU") : "Schedule pending"}</div>
           </div>
         ))
       )}

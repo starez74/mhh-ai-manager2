@@ -8,3 +8,7 @@ export type Activity = {
   title: string;
   details: string;
 };
+
+
+export type ActivityInput = Pick<Activity, "event_type" | "title"> &
+  Partial<Pick<Activity, "details" | "enquiry_id" | "quote_id" | "job_id">>;

@@ -33,3 +33,21 @@ export type JobForm = {
   vehicle: string;
   special_instructions: string;
 };
+
+
+export type CreateJobInput = {
+  userId: string;
+  quote: import("@/lib/types/quote").Quote;
+  form: JobForm;
+  jobNumber: string;
+};
+
+export type JobEditableField =
+  | "scheduled_start"
+  | "scheduled_end"
+  | "pickup_address"
+  | "delivery_address"
+  | "crew"
+  | "vehicle"
+  | "special_instructions"
+  | "paid_amount";

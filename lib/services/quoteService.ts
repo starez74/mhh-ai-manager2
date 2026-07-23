@@ -1,27 +1,8 @@
 import { browserSupabase } from "@/lib/supabase/browser";
-import type { Enquiry } from "@/lib/types/enquiry";
-import type { Quote, QuoteDraft } from "@/lib/types/quote";
+import type { CreateQuoteInput, Quote, QuoteEditableField } from "@/lib/types/quote";
 
 const quoteColumns =
   "id,created_at,archived_at,quote_number,status,enquiry_id,customer_id,customer_name,phone,email,pickup_suburb,delivery_suburb,preferred_date,scope_summary,risk_flags,missing_information,draft_message,price_amount,deposit_amount,valid_until,internal_notes";
-
-export type CreateQuoteInput = {
-  userId: string;
-  enquiry: Enquiry;
-  draft: QuoteDraft;
-  quoteNumber: string;
-  priceAmount: number | null;
-  depositAmount: number | null;
-  validUntil: string | null;
-  internalNotes: string;
-};
-
-export type QuoteEditableField =
-  | "price_amount"
-  | "deposit_amount"
-  | "valid_until"
-  | "internal_notes"
-  | "draft_message";
 
 export async function listQuotes(): Promise<Quote[]> {
   const { data, error } = await browserSupabase

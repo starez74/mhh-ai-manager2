@@ -1,6 +1,5 @@
 import { browserSupabase } from "@/lib/supabase/browser";
-
-export type RecordTable = "enquiries" | "quotes" | "jobs" | "customers";
+import type { RecordTable } from "@/lib/types/record";
 
 export async function setArchived(
   table: RecordTable,

@@ -16,13 +16,13 @@ import { createJobFromQuote, listJobs, updateJobField as updateJobFieldService, 
 import { listActivities, recordActivity } from "@/lib/services/activityService";
 import { calculateDashboardStats } from "@/lib/services/dashboardService";
 import { deleteRecord, setArchived } from "@/lib/services/recordService";
-import type { QuoteEditableField } from "@/lib/services/quoteService";
-import type { JobEditableField } from "@/lib/services/jobService";
+import type { QuoteEditableField } from "@/lib/types/quote";
+import type { JobEditableField } from "@/lib/types/job";
 import type { Customer } from "@/lib/types/customer";
 import type { Enquiry } from "@/lib/types/enquiry";
 import type { Quote, QuoteDraft } from "@/lib/types/quote";
 import type { Job } from "@/lib/types/job";
-import type { Activity } from "@/lib/types/activity";
+import type { Activity, ActivityInput } from "@/lib/types/activity";
 import type { DashboardView as View, HealthCheck } from "@/lib/types/dashboard";
 
 type Campaign={id:string;created_at:string;title:string;facebook_post?:string;content:string;status:string};
@@ -76,7 +76,7 @@ export default function Dashboard(){
  async function loadQuotes(){setQuotes(await listQuotes())}
  async function loadJobs(){setJobs(await listJobs())}
  async function loadActivities(){setActivities(await listActivities())}
- async function logActivity(values:Partial<Activity>){await recordActivity(userId,values);await loadActivities()}
+ async function logActivity(values:ActivityInput){await recordActivity(userId,values);await loadActivities()}
  async function syncFacebook(){
    setMetaLoading(true);setMetaStatus('');
    const {data}=await supabase.auth.getSession();

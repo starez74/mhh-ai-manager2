@@ -1,5 +1,5 @@
 import { browserSupabase } from "@/lib/supabase/browser";
-import type { Activity } from "@/lib/types/activity";
+import type { Activity, ActivityInput } from "@/lib/types/activity";
 
 export async function listActivities(): Promise<Activity[]> {
   const { data, error } = await browserSupabase
@@ -13,7 +13,7 @@ export async function listActivities(): Promise<Activity[]> {
 
 export async function recordActivity(
   userId: string,
-  values: Partial<Activity>
+  values: ActivityInput
 ): Promise<void> {
   const { error } = await browserSupabase.from("activity_events").insert({
     user_id: userId,

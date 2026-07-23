@@ -29,3 +29,22 @@ export type QuoteDraft = {
   draft_message: string;
   suggested_follow_up: string;
 };
+
+
+export type CreateQuoteInput = {
+  userId: string;
+  enquiry: import("@/lib/types/enquiry").Enquiry;
+  draft: QuoteDraft;
+  quoteNumber: string;
+  priceAmount: number | null;
+  depositAmount: number | null;
+  validUntil: string | null;
+  internalNotes: string;
+};
+
+export type QuoteEditableField =
+  | "price_amount"
+  | "deposit_amount"
+  | "valid_until"
+  | "internal_notes"
+  | "draft_message";
