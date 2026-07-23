@@ -1,12 +1,18 @@
+"use client";
+
+import { useMemo, useState } from "react";
+import { filterOperationsJobs } from "@/lib/services/operationsService";
 import type { Job } from "@/lib/types/job";
 import type {
-  OperationsJobGroup,
-  OperationsSummary,
+  DispatchSummary,
+  OperationsAssignmentFilter,
+  OperationsFilters,
+  OperationsScheduleGroup,
 } from "@/lib/types/operations";
 
 type OperationsCentreProps = {
-  summary: OperationsSummary;
-  groups: OperationsJobGroup[];
+  dispatch: DispatchSummary;
+  schedule: OperationsScheduleGroup[];
   onOpenJob: (job: Job) => void;
 };
 
@@ -23,42 +29,110 @@ function scheduleLabel(job: Job): string {
 }
 
 export default function OperationsCentre({
-  summary,
-  groups,
+  dispatch,
+  schedule,
   onOpenJob,
 }: OperationsCentreProps) {
+  const [assignment, setAssignment] =
+    useState<OperationsAssignmentFilter>("all");
+  const [needsAttention, setNeedsAttention] = useState(false);
+  const [status, setStatus] = useState("all");
+
+  const statuses = useMemo(
+    () =>
+      Array.from(
+        new Set(schedule.flatMap(group => group.jobs.map(job => job.status)))
+      ).sort(),
+    [schedule]
+  );
+
+  const filters: OperationsFilters = {
+    assignment,
+    needsAttention,
+    status,
+  };
+
+  const filteredSchedule = useMemo(
+    () =>
+      schedule.map(group => ({
+        ...group,
+        jobs: filterOperationsJobs(group.jobs, filters),
+      })),
+    [schedule, assignment, needsAttention, status]
+  );
+
   return (
     <>
       <div className="sectionHead">
         <div>
           <h2>Operations Centre</h2>
           <p className="muted">
-            Daily job readiness, scheduling and dispatch information.
+            Scheduling, readiness and dispatch information for active jobs.
           </p>
         </div>
       </div>
 
       <div className="grid four operationsMetrics">
         <div className="card">
-          <div className="metric">{summary.today.length}</div>
-          <div>Jobs today</div>
+          <div className="metric">{dispatch.dueToday}</div>
+          <div>Jobs due today</div>
         </div>
         <div className="card">
-          <div className="metric">{summary.upcoming.length}</div>
-          <div>Next 7 days</div>
+          <div className="metric">{dispatch.overdue}</div>
+          <div>Overdue jobs</div>
         </div>
         <div className="card">
-          <div className="metric">{summary.unscheduled.length}</div>
-          <div>Unscheduled</div>
+          <div className="metric">{dispatch.vehiclesAllocated}</div>
+          <div>Vehicles allocated</div>
         </div>
         <div className="card">
-          <div className="metric">{summary.needsAttention.length}</div>
-          <div>Need attention</div>
+          <div className="metric">{dispatch.crewsAllocated}</div>
+          <div>Crews allocated</div>
         </div>
       </div>
 
-      <div className="operationsBoard">
-        {groups.map(group => (
+      <div className="card operationsFilters" aria-label="Operations filters">
+        <div>
+          <label htmlFor="operations-assignment">Assignment</label>
+          <select
+            id="operations-assignment"
+            value={assignment}
+            onChange={event =>
+              setAssignment(event.target.value as OperationsAssignmentFilter)
+            }
+          >
+            <option value="all">All jobs</option>
+            <option value="assigned">Assigned</option>
+            <option value="unassigned">Unassigned</option>
+          </select>
+        </div>
+        <div>
+          <label htmlFor="operations-status">Status</label>
+          <select
+            id="operations-status"
+            value={status}
+            onChange={event => setStatus(event.target.value)}
+          >
+            <option value="all">All statuses</option>
+            {statuses.map(value => (
+              <option value={value} key={value}>
+                {value}
+              </option>
+            ))}
+          </select>
+        </div>
+        <label className="operationsCheck">
+          <input
+            type="checkbox"
+            checked={needsAttention}
+            onChange={event => setNeedsAttention(event.target.checked)}
+          />
+          Needs attention only
+        </label>
+      </div>
+
+      <div className="operationsSchedule">
+        {filteredSchedule.map(group => (
           <section className="card operationsColumn" key={group.key}>
             <div className="sectionHead">
               <h3>{group.label}</h3>
@@ -66,7 +140,7 @@ export default function OperationsCentre({
             </div>
 
             {group.jobs.length === 0 ? (
-              <p className="muted">No jobs in this group.</p>
+              <p className="muted">No matching jobs.</p>
             ) : (
               group.jobs.map(job => (
                 <button

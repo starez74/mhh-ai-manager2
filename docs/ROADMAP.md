@@ -12,6 +12,10 @@ The first v6 architectural foundation is in place: shared types, service boundar
 
 The first Operations Centre unit uses existing job data to show today's work, the next seven days, unscheduled jobs and records needing operational attention.
 
+## Implemented scheduling and dispatch
+
+The Operations Centre now includes schedule groups, operational filters and dispatch allocation summaries using existing job data.
+
 ## Proposed
 
 Continue Operations Centre in small units, then proceed to dashboard redesign, CRM, crew, fleet and calendar work. Database migrations should only be introduced when a completed feature requires new persisted fields.

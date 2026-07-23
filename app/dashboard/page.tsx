@@ -17,8 +17,8 @@ import { createJobFromQuote, listJobs, updateJobField as updateJobFieldService, 
 import { listActivities, recordActivity } from "@/lib/services/activityService";
 import { calculateDashboardStats } from "@/lib/services/dashboardService";
 import {
-  buildOperationsJobGroups,
-  buildOperationsSummary,
+  buildDispatchSummary,
+  buildOperationsSchedule,
 } from "@/lib/services/operationsService";
 import { deleteRecord, setArchived } from "@/lib/services/recordService";
 import type { QuoteEditableField } from "@/lib/types/quote";
@@ -214,8 +214,8 @@ export default function Dashboard(){
  async function signOut(){await signOutUser();router.replace('/login')}
 
  const {newLeads,followUps,openQuotes,upcomingJobs}=calculateDashboardStats(enquiries,quotes,jobs);
- const operationsSummary=useMemo(()=>buildOperationsSummary(jobs),[jobs]);
- const operationsGroups=useMemo(()=>buildOperationsJobGroups(operationsSummary),[operationsSummary]);
+ const operationsSchedule=useMemo(()=>buildOperationsSchedule(jobs),[jobs]);
+ const dispatchSummary=useMemo(()=>buildDispatchSummary(jobs),[jobs]);
  function openOperationsJob(job:Job){setSelectedJob(job);setSearch("");setShowArchived(false);setView("jobs");}
  const filteredCustomers=useMemo(()=>customers.filter(c=>Boolean(c.archived_at)===showArchived).filter(c=>(c.name+' '+c.phone+' '+c.email).toLowerCase().includes(search.toLowerCase())),[customers,search]);
  const filteredEnquiries=useMemo(()=>enquiries.filter(e=>Boolean(e.archived_at)===showArchived).filter(e=>(e.customer_name+' '+e.pickup_suburb+' '+e.delivery_suburb+' '+e.status).toLowerCase().includes(search.toLowerCase())),[enquiries,search]);
@@ -241,8 +241,8 @@ export default function Dashboard(){
 
   <section className={view==='operations'?'view active':'view'}>
    <OperationsCentre
-    summary={operationsSummary}
-    groups={operationsGroups}
+    dispatch={dispatchSummary}
+    schedule={operationsSchedule}
     onOpenJob={openOperationsJob}
    />
   </section>

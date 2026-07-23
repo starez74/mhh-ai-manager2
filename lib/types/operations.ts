@@ -12,3 +12,33 @@ export type OperationsJobGroup = {
   label: string;
   jobs: Job[];
 };
+
+export type OperationsScheduleKey =
+  | "unscheduled"
+  | "today"
+  | "tomorrow"
+  | "this-week";
+
+export type OperationsScheduleGroup = {
+  key: OperationsScheduleKey;
+  label: string;
+  jobs: Job[];
+};
+
+export type OperationsAssignmentFilter =
+  | "all"
+  | "assigned"
+  | "unassigned";
+
+export type OperationsFilters = {
+  assignment: OperationsAssignmentFilter;
+  needsAttention: boolean;
+  status: string;
+};
+
+export type DispatchSummary = {
+  dueToday: number;
+  overdue: number;
+  vehiclesAllocated: number;
+  crewsAllocated: number;
+};
