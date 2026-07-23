@@ -1,56 +1,22 @@
-import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { NextRequest } from "next/server";
+import { createPublicEnquiry } from "@/lib/services/enquiryService";
+import { apiError, apiSuccess, errorMessage } from "@/lib/api/responses";
+import type { ReceptionSubmission } from "@/lib/types/enquiry";
 
 function text(value: unknown, max = 1000) {
   return String(value ?? "").trim().slice(0, max);
 }
 
-export async function POST(req: NextRequest) {
+export async function POST(request: NextRequest) {
   try {
-    const body = await req.json();
-    const name = text(body.customer_name, 120);
-    const phone = text(body.phone, 40);
-    const pickup = text(body.pickup_suburb, 120);
-    const delivery = text(body.delivery_suburb, 120);
-
-    if (!name || !phone || !pickup || !delivery) {
-      return NextResponse.json(
-        { error: "Name, phone, pickup suburb and delivery suburb are required." },
-        { status: 400 }
-      );
-    }
-
-    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
-    if (!url || !key) {
-      return NextResponse.json({ error: "Supabase is not configured." }, { status: 500 });
-    }
-
-    const summary = [
-      `${name} requested a furniture-removal quote from ${pickup} to ${delivery}.`,
-      body.preferred_date ? `Preferred date: ${text(body.preferred_date, 80)}.` : "Date is flexible or not supplied.",
-      body.property_size ? `Property size: ${text(body.property_size, 80)}.` : "",
-      `Stairs: ${text(body.stairs, 20) || "No"}.`,
-      `Steep driveway: ${text(body.steep_driveway, 20) || "No"}.`,
-      body.heavy_items ? `Heavy items: ${text(body.heavy_items, 500)}.` : "No heavy items listed.",
-      body.item_summary ? `Items: ${text(body.item_summary, 1200)}.` : "",
-      body.extra_notes ? `Notes: ${text(body.extra_notes, 1200)}.` : ""
-    ].filter(Boolean).join(" ");
-
-    const supabase = createClient(url, key, {
-      auth: { persistSession: false, autoRefreshToken: false }
-    });
-
-    const { error } = await supabase.from("enquiries").insert({
-      user_id: null,
-      source: "website",
-      status: "new",
-      customer_name: name,
-      phone,
+    const body = (await request.json()) as Record<string, unknown>;
+    const input: ReceptionSubmission = {
+      customer_name: text(body.customer_name, 120),
+      phone: text(body.phone, 40),
       email: text(body.email, 180),
       preferred_contact: text(body.preferred_contact, 20) || "phone",
-      pickup_suburb: pickup,
-      delivery_suburb: delivery,
+      pickup_suburb: text(body.pickup_suburb, 120),
+      delivery_suburb: text(body.delivery_suburb, 120),
       preferred_date: text(body.preferred_date, 80),
       property_size: text(body.property_size, 80),
       stairs: text(body.stairs, 20) || "No",
@@ -58,27 +24,27 @@ export async function POST(req: NextRequest) {
       heavy_items: text(body.heavy_items, 500),
       item_summary: text(body.item_summary, 1200),
       extra_notes: text(body.extra_notes, 1200),
-      ai_summary: summary
-    });
+    };
 
-    if (error) {
-      console.error("Supabase enquiry insert failed:", {
-        code: error.code,
-        message: error.message,
-        details: error.details,
-        hint: error.hint
-      });
-      return NextResponse.json(
-        { error: error.message || "Unable to save enquiry." },
-        { status: 500 }
-      );
+    if (!input.customer_name || !input.phone || !input.pickup_suburb || !input.delivery_suburb) {
+      return apiError("Name, phone, pickup suburb and delivery suburb are required.", 400);
     }
 
-    return NextResponse.json({ ok: true });
+    const summary = [
+      `${input.customer_name} requested a furniture-removal quote from ${input.pickup_suburb} to ${input.delivery_suburb}.`,
+      input.preferred_date ? `Preferred date: ${input.preferred_date}.` : "Date is flexible or not supplied.",
+      input.property_size ? `Property size: ${input.property_size}.` : "",
+      `Stairs: ${input.stairs}.`,
+      `Steep driveway: ${input.steep_driveway}.`,
+      input.heavy_items ? `Heavy items: ${input.heavy_items}.` : "No heavy items listed.",
+      input.item_summary ? `Items: ${input.item_summary}.` : "",
+      input.extra_notes ? `Notes: ${input.extra_notes}.` : "",
+    ].filter(Boolean).join(" ");
+
+    await createPublicEnquiry(input, summary);
+    return apiSuccess({ ok: true });
   } catch (error) {
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Unable to submit enquiry." },
-      { status: 500 }
-    );
+    console.error("Reception submission failed:", errorMessage(error, "Unknown error"));
+    return apiError(errorMessage(error, "Unable to submit enquiry."), 500);
   }
 }

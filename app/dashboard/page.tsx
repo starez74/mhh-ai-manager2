@@ -1,18 +1,29 @@
-'use client';
+"use client";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
-import KPIGrid from "@/components/KPIGrid";
+import DashboardHeader from "@/components/dashboard/DashboardHeader";
+import DashboardStats from "@/components/dashboard/DashboardStats";
+import RecentActivity from "@/components/dashboard/RecentActivity";
+import NeedsAttention from "@/components/dashboard/NeedsAttention";
+import UpcomingJobs from "@/components/dashboard/UpcomingJobs";
+import QuickActions from "@/components/dashboard/QuickActions";
+import { getBrowserSession, signOut as signOutUser } from "@/lib/services/authService";
+import { listCustomers } from "@/lib/services/customerService";
+import { listEnquiries } from "@/lib/services/enquiryService";
+import { listQuotes } from "@/lib/services/quoteService";
+import { listJobs } from "@/lib/services/jobService";
+import { listActivities, recordActivity } from "@/lib/services/activityService";
+import { calculateDashboardStats } from "@/lib/services/dashboardService";
+import type { Customer } from "@/lib/types/customer";
+import type { Enquiry } from "@/lib/types/enquiry";
+import type { Quote, QuoteDraft } from "@/lib/types/quote";
+import type { Job } from "@/lib/types/job";
+import type { Activity } from "@/lib/types/activity";
+import type { DashboardView as View, HealthCheck } from "@/lib/types/dashboard";
 
 type Campaign={id:string;created_at:string;title:string;facebook_post?:string;content:string;status:string};
-type Customer={id:string;created_at:string;archived_at?:string|null;name:string;phone:string;email:string;preferred_contact:string;address:string;notes:string;status:string};
-type Enquiry={id:string;created_at:string;archived_at?:string|null;status:string;source:string;customer_name:string;phone:string;email:string;preferred_contact:string;pickup_suburb:string;delivery_suburb:string;preferred_date:string;property_size:string;stairs:string;steep_driveway:string;heavy_items:string;item_summary:string;extra_notes:string;ai_summary:string;follow_up_at?:string;customer_id?:string};
-type Quote={id:string;created_at:string;archived_at?:string|null;quote_number:string;status:string;enquiry_id?:string;customer_id?:string;customer_name:string;phone:string;email:string;pickup_suburb:string;delivery_suburb:string;preferred_date:string;scope_summary:string;risk_flags:string;missing_information:string;draft_message:string;price_amount?:number;deposit_amount?:number;valid_until?:string;internal_notes:string};
-type Job={id:string;created_at:string;archived_at?:string|null;job_number:string;status:string;quote_id?:string;enquiry_id?:string;customer_id?:string;customer_name:string;phone:string;email:string;scheduled_start?:string;scheduled_end?:string;pickup_address:string;delivery_address:string;pickup_suburb:string;delivery_suburb:string;crew:string;vehicle:string;scope_summary:string;special_instructions:string;quoted_amount?:number;paid_amount:number};
-type Activity={id:string;created_at:string;enquiry_id?:string;quote_id?:string;job_id?:string;event_type:string;title:string;details:string};
-type QuoteDraft={scope_summary:string;risk_flags:string;missing_information:string;draft_message:string;suggested_follow_up:string};
-type View="dashboard"|"enquiries"|"quotes"|"jobs"|"customers"|"receptionist"|"marketing"|"facebook"|"connections"|"settings";
-type HealthCheck={key:string;label:string;status:"healthy"|"warning"|"error";message:string;checkedAt:string};
+type MetaPost={id:string;created_time:string;message?:string;permalink_url?:string};
 
 const money=(value?:number)=>value==null||Number.isNaN(Number(value))?"Not set":new Intl.NumberFormat("en-AU",{style:"currency",currency:"AUD"}).format(Number(value));
 const localInput=(iso?:string)=>iso?new Date(iso).toISOString().slice(0,16):"";
@@ -32,7 +43,7 @@ export default function Dashboard(){
  const [selectedQuote,setSelectedQuote]=useState<Quote|null>(null);
  const [selectedJob,setSelectedJob]=useState<Job|null>(null);
  const [message,setMessage]=useState("");
- const [metaPosts,setMetaPosts]=useState<any[]>([]);
+ const [metaPosts,setMetaPosts]=useState<MetaPost[]>([]);
  const [metaConnected,setMetaConnected]=useState(false);
  const [metaLoading,setMetaLoading]=useState(false);
  const [lastSync,setLastSync]=useState("");
@@ -54,15 +65,15 @@ export default function Dashboard(){
  const [quoteNotes,setQuoteNotes]=useState("");
  const [jobForm,setJobForm]=useState({scheduled_start:"",scheduled_end:"",pickup_address:"",delivery_address:"",crew:"",vehicle:"",special_instructions:""});
 
- useEffect(()=>{(async()=>{const {data}=await supabase.auth.getSession();if(!data.session){router.replace('/login');return}setUserId(data.session.user.id);await Promise.all([loadAll(),syncFacebook(),runHealthChecks()]);})();},[]);
+ useEffect(()=>{(async()=>{const session=await getBrowserSession();if(!session){router.replace('/login');return}setUserId(session.user.id);await Promise.all([loadAll(),syncFacebook(),runHealthChecks()]);})();},[]);
  async function loadAll(){await Promise.all([loadCampaigns(),loadCustomers(),loadEnquiries(),loadQuotes(),loadJobs(),loadActivities()])}
  async function loadCampaigns(){const {data}=await supabase.from('campaigns').select('*').order('created_at',{ascending:false});setCampaigns(data||[])}
- async function loadCustomers(){const {data}=await supabase.from('customers').select('*').order('created_at',{ascending:false});setCustomers(data||[])}
- async function loadEnquiries(){const {data}=await supabase.from('enquiries').select('*').order('created_at',{ascending:false});setEnquiries(data||[])}
- async function loadQuotes(){const {data}=await supabase.from('quotes').select('*').order('created_at',{ascending:false});setQuotes(data||[])}
- async function loadJobs(){const {data}=await supabase.from('jobs').select('*').order('scheduled_start',{ascending:true});setJobs(data||[])}
- async function loadActivities(){const {data}=await supabase.from('activity_events').select('*').order('created_at',{ascending:false}).limit(500);setActivities(data||[])}
- async function logActivity(values:Partial<Activity>){await supabase.from('activity_events').insert({user_id:userId,event_type:values.event_type||'update',title:values.title||'Updated',details:values.details||'',enquiry_id:values.enquiry_id||null,quote_id:values.quote_id||null,job_id:values.job_id||null});await loadActivities()}
+ async function loadCustomers(){setCustomers(await listCustomers())}
+ async function loadEnquiries(){setEnquiries(await listEnquiries())}
+ async function loadQuotes(){setQuotes(await listQuotes())}
+ async function loadJobs(){setJobs(await listJobs())}
+ async function loadActivities(){setActivities(await listActivities())}
+ async function logActivity(values:Partial<Activity>){await recordActivity(userId,values);await loadActivities()}
  async function syncFacebook(){
    setMetaLoading(true);setMetaStatus('');
    const {data}=await supabase.auth.getSession();
@@ -208,12 +219,9 @@ export default function Dashboard(){
    setMessage('');
    await Promise.all([runHealthChecks(),syncFacebook()]);
  }
- async function signOut(){await supabase.auth.signOut();router.replace('/login')}
+ async function signOut(){await signOutUser();router.replace('/login')}
 
- const newLeads=enquiries.filter(e=>!e.archived_at&&e.status==='new').length;
- const followUps=enquiries.filter(e=>!e.archived_at&&e.follow_up_at&&new Date(e.follow_up_at)<=new Date(Date.now()+86400000)&&!['closed','declined','booked'].includes(e.status)).length;
- const openQuotes=quotes.filter(q=>!q.archived_at&&['draft','approved','sent'].includes(q.status)).length;
- const upcomingJobs=jobs.filter(j=>!j.archived_at&&j.scheduled_start&&new Date(j.scheduled_start)>=new Date()&&!['completed','cancelled'].includes(j.status)).length;
+ const {newLeads,followUps,openQuotes,upcomingJobs}=calculateDashboardStats(enquiries,quotes,jobs);
  const filteredCustomers=useMemo(()=>customers.filter(c=>Boolean(c.archived_at)===showArchived).filter(c=>(c.name+' '+c.phone+' '+c.email).toLowerCase().includes(search.toLowerCase())),[customers,search]);
  const filteredEnquiries=useMemo(()=>enquiries.filter(e=>Boolean(e.archived_at)===showArchived).filter(e=>(e.customer_name+' '+e.pickup_suburb+' '+e.delivery_suburb+' '+e.status).toLowerCase().includes(search.toLowerCase())),[enquiries,search]);
  const filteredQuotes=useMemo(()=>quotes.filter(q=>Boolean(q.archived_at)===showArchived).filter(q=>(q.quote_number+' '+q.customer_name+' '+q.pickup_suburb+' '+q.delivery_suburb+' '+q.status).toLowerCase().includes(search.toLowerCase())),[quotes,search]);
@@ -226,12 +234,14 @@ export default function Dashboard(){
   {message&&<div className="notice">{message}</div>}
 
   <section className={view==='dashboard'?'view active':'view'}>
-   <KPIGrid
-    newLeads={newLeads}
-    openQuotes={openQuotes}
-    upcomingJobs={upcomingJobs}
-    followUps={followUps}
-/>
+   <DashboardHeader message={message} />
+   <DashboardStats newLeads={newLeads} openQuotes={openQuotes} upcomingJobs={upcomingJobs} followUps={followUps} />
+   <div className="grid two" style={{marginTop:18}}>
+    <NeedsAttention enquiries={enquiries} quotes={quotes} />
+    <UpcomingJobs jobs={jobs} />
+    <RecentActivity items={activities} />
+    <QuickActions onOpenEnquiries={()=>setView('enquiries')} onOpenQuotes={()=>setView('quotes')} onOpenJobs={()=>setView('jobs')} />
+   </div>
   </section>
 
   <section className={view==='enquiries'?'view active':'view'}><div className="grid two"><div className="card"><div className="sectionHead"><h3>Enquiry Pipeline</h3><div className="listTools"><button className="btn secondary small" onClick={()=>{setShowArchived(!showArchived);setSelected(null)}}>{showArchived?"Show active":"Show archived"}</button><input className="searchBox" placeholder="Search enquiries" value={search} onChange={e=>setSearch(e.target.value)}/></div></div>{filteredEnquiries.map(e=><button key={e.id} className={`leadRow ${selected?.id===e.id?'selected':''}`} onClick={()=>{setSelected(e);setQuoteDraft(null)}}><div><strong>{e.customer_name}</strong><span className="badge">{e.status}</span></div><span>{e.pickup_suburb} → {e.delivery_suburb}</span><span>{new Date(e.created_at).toLocaleString('en-AU')}</span></button>)}{!filteredEnquiries.length&&<p className="muted">No enquiries found.</p>}</div><div className="card">{!selected?<p className="muted">Select an enquiry to review it.</p>:<div><div className="sectionHead"><h3>{selected.customer_name}</h3><span className="badge">{selected.status}</span></div><p><strong>Phone:</strong> <a href={`tel:${selected.phone}`}>{selected.phone}</a></p><p><strong>Email:</strong> {selected.email||'Not supplied'}</p><div className="notice"><strong>Enquiry summary</strong><br/>{selected.ai_summary}</div><p><strong>Move:</strong> {selected.pickup_suburb} → {selected.delivery_suburb}</p><p><strong>Date:</strong> {selected.preferred_date||'Flexible / not supplied'}</p><p><strong>Property:</strong> {selected.property_size||'Not supplied'}</p><p><strong>Stairs:</strong> {selected.stairs} · <strong>Steep driveway:</strong> {selected.steep_driveway}</p><p><strong>Heavy items:</strong> {selected.heavy_items||'None listed'}</p><p><strong>Items:</strong> {selected.item_summary||'Not supplied'}</p><label>Status</label><select value={selected.status} onChange={e=>setEnquiryStatus(selected.id,e.target.value)}><option>new</option><option>contacted</option><option>quoted</option><option>booked</option><option>closed</option><option>declined</option></select><label>Follow-up date and time</label><input type="datetime-local" defaultValue={localInput(selected.follow_up_at)} onBlur={e=>setFollowUp(selected.id,e.target.value)}/><div className="actions"><a className="btn linkBtn" href={`tel:${selected.phone}`}>Call</a><a className="btn secondary linkBtn" href={`sms:${selected.phone}`}>SMS</a>{!selected.customer_id&&<button className="btn secondary" onClick={()=>convertToCustomer(selected)}>Convert to customer</button>}<button className="btn" onClick={()=>generateQuote(selected)} disabled={quoteLoading}>{quoteLoading?'Drafting…':'Generate quote'}</button></div><div className="recordControls">{selected.archived_at?<button className="btn secondary" onClick={()=>archiveRecord('enquiries',selected.id,true)}>Restore enquiry</button>:<button className="btn secondary" onClick={()=>archiveRecord('enquiries',selected.id)}>Archive enquiry</button>}<button className="btn danger" onClick={()=>permanentlyDelete('enquiries',selected.id,`enquiry for ${selected.customer_name}`)}>Delete permanently</button></div>
@@ -253,7 +263,7 @@ export default function Dashboard(){
 
   <section className={view==='marketing'?'view active':'view'}><div className="card"><h3>Marketing Module</h3><p>Saved campaigns: <strong>{campaigns.length}</strong></p>{campaigns.slice(0,8).map(c=><div className="campaign" key={c.id}><strong>{c.title}</strong><span className="badge" style={{marginLeft:10}}>{c.status}</span><div className="result" style={{marginTop:10}}>{c.facebook_post||c.content}</div></div>)}</div></section>
 
-  <section className={view==='facebook'?'view active':'view'}><div className="grid two"><div className="card"><h3>Facebook Connection Diagnostic</h3><p>Overall connection: <strong className={metaConnected?'success':'error'}>{metaConnected?'Connected':'Not connected'}</strong></p><p>Recent-post access: <strong className={metaPostsReadable?'success':'error'}>{metaPostsReadable?'Working':'Not verified'}</strong></p><p>Configured Page: <strong>{metaPageName||'Not verified'}</strong></p>{metaPageLink&&<p><a href={metaPageLink} target="_blank" rel="noreferrer">Open connected Facebook Page</a></p>}<p>Graph API setting: <strong>{metaGraphVersion||'Not reported'}</strong></p><p>Last check: {lastSync?new Date(lastSync).toLocaleString('en-AU'):'Never'}</p>{metaStatus&&<div className={metaConnected?'notice':'notice diagnosticError'}><strong>{metaConnected?'Check passed':'Check result'}</strong><br/>{metaStatus}</div>}<button className="btn" disabled={metaLoading} onClick={syncFacebook}>{metaLoading?'Checking…':'Run Facebook Connection Check'}</button></div><div className="card"><div className="sectionHead"><h3>Recent Page Posts</h3><span className="badge">{metaPosts.length} loaded</span></div>{metaPosts.map((p:any)=><div className="campaign" key={p.id}><div className="muted">{new Date(p.created_time).toLocaleString('en-AU')}</div><p>{p.message||'(Post without text)'}</p>{p.permalink_url&&<a href={p.permalink_url} target="_blank" rel="noreferrer">Open post on Facebook</a>}</div>)}{!metaPosts.length&&<p className="muted">Run the connection check to load recent posts.</p>}</div></div></section>
+  <section className={view==='facebook'?'view active':'view'}><div className="grid two"><div className="card"><h3>Facebook Connection Diagnostic</h3><p>Overall connection: <strong className={metaConnected?'success':'error'}>{metaConnected?'Connected':'Not connected'}</strong></p><p>Recent-post access: <strong className={metaPostsReadable?'success':'error'}>{metaPostsReadable?'Working':'Not verified'}</strong></p><p>Configured Page: <strong>{metaPageName||'Not verified'}</strong></p>{metaPageLink&&<p><a href={metaPageLink} target="_blank" rel="noreferrer">Open connected Facebook Page</a></p>}<p>Graph API setting: <strong>{metaGraphVersion||'Not reported'}</strong></p><p>Last check: {lastSync?new Date(lastSync).toLocaleString('en-AU'):'Never'}</p>{metaStatus&&<div className={metaConnected?'notice':'notice diagnosticError'}><strong>{metaConnected?'Check passed':'Check result'}</strong><br/>{metaStatus}</div>}<button className="btn" disabled={metaLoading} onClick={syncFacebook}>{metaLoading?'Checking…':'Run Facebook Connection Check'}</button></div><div className="card"><div className="sectionHead"><h3>Recent Page Posts</h3><span className="badge">{metaPosts.length} loaded</span></div>{metaPosts.map(p=><div className="campaign" key={p.id}><div className="muted">{new Date(p.created_time).toLocaleString('en-AU')}</div><p>{p.message||'(Post without text)'}</p>{p.permalink_url&&<a href={p.permalink_url} target="_blank" rel="noreferrer">Open post on Facebook</a>}</div>)}{!metaPosts.length&&<p className="muted">Run the connection check to load recent posts.</p>}</div></div></section>
 
   <section className={view==='connections'?'view active':'view'}>
    <div className="sectionHead"><div><h2>Connection Centre</h2><p className="muted">Live health checks for services used by MHH AI Business Manager.</p></div><button className="btn" disabled={healthLoading||metaLoading} onClick={runAllConnectionChecks}>{healthLoading||metaLoading?'Checking…':'Run all checks'}</button></div>
