@@ -21,6 +21,7 @@ import {
   buildOperationsSchedule,
 } from "@/lib/services/operationsService";
 import { deleteRecord, setArchived } from "@/lib/services/recordService";
+import { saveDispatchAssignment } from "@/lib/services/dispatchService";
 import type { QuoteEditableField } from "@/lib/types/quote";
 import type { JobEditableField } from "@/lib/types/job";
 import type { Customer } from "@/lib/types/customer";
@@ -29,6 +30,7 @@ import type { Quote, QuoteDraft } from "@/lib/types/quote";
 import type { Job } from "@/lib/types/job";
 import type { Activity, ActivityInput } from "@/lib/types/activity";
 import type { DashboardView as View, HealthCheck } from "@/lib/types/dashboard";
+import type { DispatchAssignmentInput } from "@/lib/types/operations";
 
 type Campaign={id:string;created_at:string;title:string;facebook_post?:string;content:string;status:string};
 type MetaPost={id:string;created_time:string;message?:string;permalink_url?:string};
@@ -191,6 +193,13 @@ export default function Dashboard(){
    try{const finalValue=await updateJobFieldService(j.id,field,value);await loadJobs();setSelectedJob({...j,[field]:finalValue});}
    catch(error){setMessage(error instanceof Error?error.message:'Unable to update job.');}
  }
+ async function saveDispatch(j:Job,assignment:DispatchAssignmentInput){
+   const updated=await saveDispatchAssignment(j.id,assignment);
+   await logActivity({job_id:j.id,quote_id:j.quote_id,enquiry_id:j.enquiry_id,event_type:'dispatch_updated',title:`Dispatch updated for ${j.job_number}`,details:`${updated.crew} · ${updated.vehicle}`});
+   await loadJobs();
+   setMessage(`Dispatch updated for ${j.job_number}.`);
+   if(selectedJob?.id===j.id)setSelectedJob({...j,...updated,scheduled_start:updated.scheduled_start??undefined,scheduled_end:updated.scheduled_end??undefined});
+ }
  async function runHealthChecks(){
    setHealthLoading(true);
    const {data}=await supabase.auth.getSession();
@@ -241,9 +250,11 @@ export default function Dashboard(){
 
   <section className={view==='operations'?'view active':'view'}>
    <OperationsCentre
+    jobs={jobs}
     dispatch={dispatchSummary}
     schedule={operationsSchedule}
     onOpenJob={openOperationsJob}
+    onSaveDispatch={saveDispatch}
    />
   </section>
 

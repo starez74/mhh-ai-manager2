@@ -19,3 +19,9 @@ The Operations Centre now includes schedule groups, operational filters and disp
 ## Proposed
 
 Continue Operations Centre in small units, then proceed to dashboard redesign, CRM, crew, fleet and calendar work. Database migrations should only be introduced when a completed feature requires new persisted fields.
+
+- [x] Interactive dispatch assignment workflow
+
+## Implemented calendar and timeline scheduling
+
+The Operations Centre now provides day, week and month calendar views, drag-and-drop day scheduling, duration adjustment and assignment conflict checks using existing job records.

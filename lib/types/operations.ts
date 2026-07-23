@@ -1,5 +1,19 @@
 import type { Job } from "@/lib/types/job";
 
+export interface DispatchAssignmentResult {
+  scheduled_start: string | null;
+  scheduled_end: string | null;
+  crew: string;
+  vehicle: string;
+};
+
+export interface DispatchAssignmentInput {
+  crew: string;
+  vehicle: string;
+  scheduledStart: string;
+  scheduledEnd: string;
+};
+
 export type OperationsSummary = {
   today: Job[];
   upcoming: Job[];
