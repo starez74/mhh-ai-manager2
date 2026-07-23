@@ -9,6 +9,7 @@ import NeedsAttention from "@/components/dashboard/NeedsAttention";
 import UpcomingJobs from "@/components/dashboard/UpcomingJobs";
 import QuickActions from "@/components/dashboard/QuickActions";
 import OperationsCentre from "@/components/dashboard/OperationsCentre";
+import ResourceCentre from "@/components/dashboard/ResourceCentre";
 import { getBrowserSession, signOut as signOutUser } from "@/lib/services/authService";
 import { convertEnquiryToCustomer, createCustomer, listCustomers } from "@/lib/services/customerService";
 import { listEnquiries, updateEnquiryFollowUp, updateEnquiryStatus } from "@/lib/services/enquiryService";
@@ -22,6 +23,9 @@ import {
 } from "@/lib/services/operationsService";
 import { deleteRecord, setArchived } from "@/lib/services/recordService";
 import { saveDispatchAssignment } from "@/lib/services/dispatchService";
+import { listCrews } from "@/lib/services/crewService";
+import { listVehicles } from "@/lib/services/vehicleService";
+import { buildResourceSummary } from "@/lib/services/resourceService";
 import type { QuoteEditableField } from "@/lib/types/quote";
 import type { JobEditableField } from "@/lib/types/job";
 import type { Customer } from "@/lib/types/customer";
@@ -31,6 +35,8 @@ import type { Job } from "@/lib/types/job";
 import type { Activity, ActivityInput } from "@/lib/types/activity";
 import type { DashboardView as View, HealthCheck } from "@/lib/types/dashboard";
 import type { DispatchAssignmentInput } from "@/lib/types/operations";
+import type { Crew } from "@/lib/types/crew";
+import type { Vehicle } from "@/lib/types/vehicle";
 
 type Campaign={id:string;created_at:string;title:string;facebook_post?:string;content:string;status:string};
 type MetaPost={id:string;created_time:string;message?:string;permalink_url?:string};
@@ -48,6 +54,10 @@ export default function Dashboard(){
  const [enquiries,setEnquiries]=useState<Enquiry[]>([]);
  const [quotes,setQuotes]=useState<Quote[]>([]);
  const [jobs,setJobs]=useState<Job[]>([]);
+ const [crews,setCrews]=useState<Crew[]>([]);
+ const [vehicles,setVehicles]=useState<Vehicle[]>([]);
+ const [resourcesLoading,setResourcesLoading]=useState(true);
+ const [resourcesError,setResourcesError]=useState("");
  const [activities,setActivities]=useState<Activity[]>([]);
  const [selected,setSelected]=useState<Enquiry|null>(null);
  const [selectedQuote,setSelectedQuote]=useState<Quote|null>(null);
@@ -76,13 +86,26 @@ export default function Dashboard(){
  const [jobForm,setJobForm]=useState({scheduled_start:"",scheduled_end:"",pickup_address:"",delivery_address:"",crew:"",vehicle:"",special_instructions:""});
 
  useEffect(()=>{(async()=>{const session=await getBrowserSession();if(!session){router.replace('/login');return}setUserId(session.user.id);await Promise.all([loadAll(),syncFacebook(),runHealthChecks()]);})();},[]);
- async function loadAll(){await Promise.all([loadCampaigns(),loadCustomers(),loadEnquiries(),loadQuotes(),loadJobs(),loadActivities()])}
+ async function loadAll(){await Promise.all([loadCampaigns(),loadCustomers(),loadEnquiries(),loadQuotes(),loadJobs(),loadActivities(),loadResources()])}
  async function loadCampaigns(){const {data}=await supabase.from('campaigns').select('*').order('created_at',{ascending:false});setCampaigns(data||[])}
  async function loadCustomers(){setCustomers(await listCustomers())}
  async function loadEnquiries(){setEnquiries(await listEnquiries())}
  async function loadQuotes(){setQuotes(await listQuotes())}
  async function loadJobs(){setJobs(await listJobs())}
  async function loadActivities(){setActivities(await listActivities())}
+ async function loadResources(){
+   setResourcesLoading(true);
+   setResourcesError("");
+   try{
+     const [crewRows,vehicleRows]=await Promise.all([listCrews(),listVehicles()]);
+     setCrews(crewRows);
+     setVehicles(vehicleRows);
+   }catch(error){
+     setResourcesError(error instanceof Error?error.message:"Unable to load resources.");
+   }finally{
+     setResourcesLoading(false);
+   }
+ }
  async function logActivity(values:ActivityInput){await recordActivity(userId,values);await loadActivities()}
  async function syncFacebook(){
    setMetaLoading(true);setMetaStatus('');
@@ -225,6 +248,7 @@ export default function Dashboard(){
  const {newLeads,followUps,openQuotes,upcomingJobs}=calculateDashboardStats(enquiries,quotes,jobs);
  const operationsSchedule=useMemo(()=>buildOperationsSchedule(jobs),[jobs]);
  const dispatchSummary=useMemo(()=>buildDispatchSummary(jobs),[jobs]);
+ const resourceSummary=useMemo(()=>buildResourceSummary(crews,vehicles),[crews,vehicles]);
  function openOperationsJob(job:Job){setSelectedJob(job);setSearch("");setShowArchived(false);setView("jobs");}
  const filteredCustomers=useMemo(()=>customers.filter(c=>Boolean(c.archived_at)===showArchived).filter(c=>(c.name+' '+c.phone+' '+c.email).toLowerCase().includes(search.toLowerCase())),[customers,search]);
  const filteredEnquiries=useMemo(()=>enquiries.filter(e=>Boolean(e.archived_at)===showArchived).filter(e=>(e.customer_name+' '+e.pickup_suburb+' '+e.delivery_suburb+' '+e.status).toLowerCase().includes(search.toLowerCase())),[enquiries,search]);
@@ -233,7 +257,7 @@ export default function Dashboard(){
  const relevantActivity=(enquiryId?:string,quoteId?:string,jobId?:string)=>activities.filter(a=>(enquiryId&&a.enquiry_id===enquiryId)||(quoteId&&a.quote_id===quoteId)||(jobId&&a.job_id===jobId)).slice(0,20);
 
  return <div className="shell">
-  <aside className="sidebar"><h2 className="brand">MHH AI Manager</h2><div className="tagline">FROM OUR HANDS TO YOUR HOME</div><div className="nav">{([['dashboard','Dashboard'],['operations','Operations'],['enquiries','Enquiries'],['quotes','Quotes'],['jobs','Jobs'],['customers','Customers'],['receptionist','AI Receptionist'],['marketing','Marketing'],['facebook','Facebook'],['connections','Connections'],['settings','Settings']] as [View,string][]).map(([id,label])=><button key={id} className={view===id?'active':''} onClick={()=>{setView(id);setMessage('')}}>{label}</button>)}</div><div className="muted version">Version 5.2.0</div></aside>
+  <aside className="sidebar"><h2 className="brand">MHH AI Manager</h2><div className="tagline">FROM OUR HANDS TO YOUR HOME</div><div className="nav">{([['dashboard','Dashboard'],['operations','Operations'],['resources','Resources'],['enquiries','Enquiries'],['quotes','Quotes'],['jobs','Jobs'],['customers','Customers'],['receptionist','AI Receptionist'],['marketing','Marketing'],['facebook','Facebook'],['connections','Connections'],['settings','Settings']] as [View,string][]).map(([id,label])=><button key={id} className={view===id?'active':''} onClick={()=>{setView(id);setMessage('')}}>{label}</button>)}</div><div className="muted version">Version 5.2.0</div></aside>
   <main className="main"><div className="top"><div><h1>MHH AI Business Manager</h1><div className="muted">Enquiry → quote → booking → job completion</div></div><div className="pill">{newLeads} new · {openQuotes} open quotes · {upcomingJobs} upcoming jobs</div></div>
   {message&&<div className="notice">{message}</div>}
 
@@ -255,6 +279,17 @@ export default function Dashboard(){
     schedule={operationsSchedule}
     onOpenJob={openOperationsJob}
     onSaveDispatch={saveDispatch}
+   />
+  </section>
+
+  <section className={view==='resources'?'view active':'view'}>
+   <ResourceCentre
+    crews={crews}
+    vehicles={vehicles}
+    summary={resourceSummary}
+    loading={resourcesLoading}
+    error={resourcesError}
+    onRetry={loadResources}
    />
   </section>
 

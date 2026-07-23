@@ -25,3 +25,12 @@ Continue Operations Centre in small units, then proceed to dashboard redesign, C
 ## Implemented calendar and timeline scheduling
 
 The Operations Centre now provides day, week and month calendar views, drag-and-drop day scheduling, duration adjustment and assignment conflict checks using existing job records.
+
+
+## Resource management
+
+- [x] Resource foundation: crew and vehicle tables, shared types, services and dashboard summary.
+- [ ] Crew and vehicle CRUD.
+- [ ] Structured scheduling assignments.
+- [ ] Availability and workload engine.
+- [ ] Resource conflict validation using stable resource IDs.

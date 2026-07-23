@@ -42,3 +42,11 @@
 - Added day, week and month scheduling views.
 - Added drag-and-drop day scheduling, duration controls and crew/vehicle conflict prevention.
 - Added an unscheduled job lane and overdue schedule indicators.
+
+
+## Resource management foundation
+
+- Added database-backed crew and vehicle resource models with ownership-scoped RLS policies.
+- Added typed crew, vehicle and resource services.
+- Added a Resources dashboard view with availability summaries and empty, loading and error states.
+- Existing job crew and vehicle fields remain unchanged until scheduling integration is completed.

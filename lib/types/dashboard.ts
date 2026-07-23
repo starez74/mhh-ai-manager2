@@ -16,6 +16,7 @@ export type HealthCheck = {
 export type DashboardView =
   | "dashboard"
   | "operations"
+  | "resources"
   | "enquiries"
   | "quotes"
   | "jobs"
