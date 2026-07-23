@@ -20,3 +20,10 @@
 - No schema or migration changes.
 
 - Consolidated reusable service input/editable-field types under `lib/types`, removed the unused duplicate root KPI grid, and eliminated an unnecessary dashboard date cast.
+
+## Operations Centre foundation
+
+- Added a live Operations Centre using existing job records.
+- Added daily, seven-day, unscheduled and readiness views.
+- Added direct navigation from an operations card to the existing job editor.
+- Added reusable operations types and aggregation service functions.

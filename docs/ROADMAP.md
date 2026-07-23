@@ -8,6 +8,10 @@ The production application identifies as v5.2.0 and the working branch for v6 is
 
 The first v6 architectural foundation is in place: shared types, service boundaries, Supabase client separation, configuration validation and reusable dashboard presentation components.
 
+## Implemented next
+
+The first Operations Centre unit uses existing job data to show today's work, the next seven days, unscheduled jobs and records needing operational attention.
+
 ## Proposed
 
-Complete extraction of remaining dashboard mutations, then standardise all API routes before beginning Operations Centre or other new business modules.
+Continue Operations Centre in small units, then proceed to dashboard redesign, CRM, crew, fleet and calendar work. Database migrations should only be introduced when a completed feature requires new persisted fields.

@@ -8,6 +8,7 @@ import RecentActivity from "@/components/dashboard/RecentActivity";
 import NeedsAttention from "@/components/dashboard/NeedsAttention";
 import UpcomingJobs from "@/components/dashboard/UpcomingJobs";
 import QuickActions from "@/components/dashboard/QuickActions";
+import OperationsCentre from "@/components/dashboard/OperationsCentre";
 import { getBrowserSession, signOut as signOutUser } from "@/lib/services/authService";
 import { convertEnquiryToCustomer, createCustomer, listCustomers } from "@/lib/services/customerService";
 import { listEnquiries, updateEnquiryFollowUp, updateEnquiryStatus } from "@/lib/services/enquiryService";
@@ -15,6 +16,10 @@ import { createQuote, listQuotes, updateQuoteField as updateQuoteFieldService, u
 import { createJobFromQuote, listJobs, updateJobField as updateJobFieldService, updateJobStatus as updateJobStatusService } from "@/lib/services/jobService";
 import { listActivities, recordActivity } from "@/lib/services/activityService";
 import { calculateDashboardStats } from "@/lib/services/dashboardService";
+import {
+  buildOperationsJobGroups,
+  buildOperationsSummary,
+} from "@/lib/services/operationsService";
 import { deleteRecord, setArchived } from "@/lib/services/recordService";
 import type { QuoteEditableField } from "@/lib/types/quote";
 import type { JobEditableField } from "@/lib/types/job";
@@ -209,6 +214,9 @@ export default function Dashboard(){
  async function signOut(){await signOutUser();router.replace('/login')}
 
  const {newLeads,followUps,openQuotes,upcomingJobs}=calculateDashboardStats(enquiries,quotes,jobs);
+ const operationsSummary=useMemo(()=>buildOperationsSummary(jobs),[jobs]);
+ const operationsGroups=useMemo(()=>buildOperationsJobGroups(operationsSummary),[operationsSummary]);
+ function openOperationsJob(job:Job){setSelectedJob(job);setSearch("");setShowArchived(false);setView("jobs");}
  const filteredCustomers=useMemo(()=>customers.filter(c=>Boolean(c.archived_at)===showArchived).filter(c=>(c.name+' '+c.phone+' '+c.email).toLowerCase().includes(search.toLowerCase())),[customers,search]);
  const filteredEnquiries=useMemo(()=>enquiries.filter(e=>Boolean(e.archived_at)===showArchived).filter(e=>(e.customer_name+' '+e.pickup_suburb+' '+e.delivery_suburb+' '+e.status).toLowerCase().includes(search.toLowerCase())),[enquiries,search]);
  const filteredQuotes=useMemo(()=>quotes.filter(q=>Boolean(q.archived_at)===showArchived).filter(q=>(q.quote_number+' '+q.customer_name+' '+q.pickup_suburb+' '+q.delivery_suburb+' '+q.status).toLowerCase().includes(search.toLowerCase())),[quotes,search]);
@@ -216,7 +224,7 @@ export default function Dashboard(){
  const relevantActivity=(enquiryId?:string,quoteId?:string,jobId?:string)=>activities.filter(a=>(enquiryId&&a.enquiry_id===enquiryId)||(quoteId&&a.quote_id===quoteId)||(jobId&&a.job_id===jobId)).slice(0,20);
 
  return <div className="shell">
-  <aside className="sidebar"><h2 className="brand">MHH AI Manager</h2><div className="tagline">FROM OUR HANDS TO YOUR HOME</div><div className="nav">{([['dashboard','Dashboard'],['enquiries','Enquiries'],['quotes','Quotes'],['jobs','Jobs'],['customers','Customers'],['receptionist','AI Receptionist'],['marketing','Marketing'],['facebook','Facebook'],['connections','Connections'],['settings','Settings']] as [View,string][]).map(([id,label])=><button key={id} className={view===id?'active':''} onClick={()=>{setView(id);setMessage('')}}>{label}</button>)}</div><div className="muted version">Version 5.2.0</div></aside>
+  <aside className="sidebar"><h2 className="brand">MHH AI Manager</h2><div className="tagline">FROM OUR HANDS TO YOUR HOME</div><div className="nav">{([['dashboard','Dashboard'],['operations','Operations'],['enquiries','Enquiries'],['quotes','Quotes'],['jobs','Jobs'],['customers','Customers'],['receptionist','AI Receptionist'],['marketing','Marketing'],['facebook','Facebook'],['connections','Connections'],['settings','Settings']] as [View,string][]).map(([id,label])=><button key={id} className={view===id?'active':''} onClick={()=>{setView(id);setMessage('')}}>{label}</button>)}</div><div className="muted version">Version 5.2.0</div></aside>
   <main className="main"><div className="top"><div><h1>MHH AI Business Manager</h1><div className="muted">Enquiry → quote → booking → job completion</div></div><div className="pill">{newLeads} new · {openQuotes} open quotes · {upcomingJobs} upcoming jobs</div></div>
   {message&&<div className="notice">{message}</div>}
 
@@ -229,6 +237,14 @@ export default function Dashboard(){
     <RecentActivity items={activities} />
     <QuickActions onOpenEnquiries={()=>setView('enquiries')} onOpenQuotes={()=>setView('quotes')} onOpenJobs={()=>setView('jobs')} />
    </div>
+  </section>
+
+  <section className={view==='operations'?'view active':'view'}>
+   <OperationsCentre
+    summary={operationsSummary}
+    groups={operationsGroups}
+    onOpenJob={openOperationsJob}
+   />
   </section>
 
   <section className={view==='enquiries'?'view active':'view'}><div className="grid two"><div className="card"><div className="sectionHead"><h3>Enquiry Pipeline</h3><div className="listTools"><button className="btn secondary small" onClick={()=>{setShowArchived(!showArchived);setSelected(null)}}>{showArchived?"Show active":"Show archived"}</button><input className="searchBox" placeholder="Search enquiries" value={search} onChange={e=>setSearch(e.target.value)}/></div></div>{filteredEnquiries.map(e=><button key={e.id} className={`leadRow ${selected?.id===e.id?'selected':''}`} onClick={()=>{setSelected(e);setQuoteDraft(null)}}><div><strong>{e.customer_name}</strong><span className="badge">{e.status}</span></div><span>{e.pickup_suburb} → {e.delivery_suburb}</span><span>{new Date(e.created_at).toLocaleString('en-AU')}</span></button>)}{!filteredEnquiries.length&&<p className="muted">No enquiries found.</p>}</div><div className="card">{!selected?<p className="muted">Select an enquiry to review it.</p>:<div><div className="sectionHead"><h3>{selected.customer_name}</h3><span className="badge">{selected.status}</span></div><p><strong>Phone:</strong> <a href={`tel:${selected.phone}`}>{selected.phone}</a></p><p><strong>Email:</strong> {selected.email||'Not supplied'}</p><div className="notice"><strong>Enquiry summary</strong><br/>{selected.ai_summary}</div><p><strong>Move:</strong> {selected.pickup_suburb} → {selected.delivery_suburb}</p><p><strong>Date:</strong> {selected.preferred_date||'Flexible / not supplied'}</p><p><strong>Property:</strong> {selected.property_size||'Not supplied'}</p><p><strong>Stairs:</strong> {selected.stairs} · <strong>Steep driveway:</strong> {selected.steep_driveway}</p><p><strong>Heavy items:</strong> {selected.heavy_items||'None listed'}</p><p><strong>Items:</strong> {selected.item_summary||'Not supplied'}</p><label>Status</label><select value={selected.status} onChange={e=>setEnquiryStatus(selected.id,e.target.value)}><option>new</option><option>contacted</option><option>quoted</option><option>booked</option><option>closed</option><option>declined</option></select><label>Follow-up date and time</label><input type="datetime-local" defaultValue={localInput(selected.follow_up_at)} onBlur={e=>setFollowUp(selected.id,e.target.value)}/><div className="actions"><a className="btn linkBtn" href={`tel:${selected.phone}`}>Call</a><a className="btn secondary linkBtn" href={`sms:${selected.phone}`}>SMS</a>{!selected.customer_id&&<button className="btn secondary" onClick={()=>convertToCustomer(selected)}>Convert to customer</button>}<button className="btn" onClick={()=>generateQuote(selected)} disabled={quoteLoading}>{quoteLoading?'Drafting…':'Generate quote'}</button></div><div className="recordControls">{selected.archived_at?<button className="btn secondary" onClick={()=>archiveRecord('enquiries',selected.id,true)}>Restore enquiry</button>:<button className="btn secondary" onClick={()=>archiveRecord('enquiries',selected.id)}>Archive enquiry</button>}<button className="btn danger" onClick={()=>permanentlyDelete('enquiries',selected.id,`enquiry for ${selected.customer_name}`)}>Delete permanently</button></div>
