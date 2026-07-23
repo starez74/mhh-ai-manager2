@@ -1,18 +1,39 @@
-'use client';
+"use client";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
-import KPIGrid from "@/components/KPIGrid";
+import DashboardHeader from "@/components/dashboard/DashboardHeader";
+import DashboardStats from "@/components/dashboard/DashboardStats";
+import RecentActivity from "@/components/dashboard/RecentActivity";
+import NeedsAttention from "@/components/dashboard/NeedsAttention";
+import UpcomingJobs from "@/components/dashboard/UpcomingJobs";
+import QuickActions from "@/components/dashboard/QuickActions";
+import OperationsCentre from "@/components/dashboard/OperationsCentre";
+import { getBrowserSession, signOut as signOutUser } from "@/lib/services/authService";
+import { convertEnquiryToCustomer, createCustomer, listCustomers } from "@/lib/services/customerService";
+import { listEnquiries, updateEnquiryFollowUp, updateEnquiryStatus } from "@/lib/services/enquiryService";
+import { createQuote, listQuotes, updateQuoteField as updateQuoteFieldService, updateQuoteStatus as updateQuoteStatusService } from "@/lib/services/quoteService";
+import { createJobFromQuote, listJobs, updateJobField as updateJobFieldService, updateJobStatus as updateJobStatusService } from "@/lib/services/jobService";
+import { listActivities, recordActivity } from "@/lib/services/activityService";
+import { calculateDashboardStats } from "@/lib/services/dashboardService";
+import {
+  buildDispatchSummary,
+  buildOperationsSchedule,
+} from "@/lib/services/operationsService";
+import { deleteRecord, setArchived } from "@/lib/services/recordService";
+import { saveDispatchAssignment } from "@/lib/services/dispatchService";
+import type { QuoteEditableField } from "@/lib/types/quote";
+import type { JobEditableField } from "@/lib/types/job";
+import type { Customer } from "@/lib/types/customer";
+import type { Enquiry } from "@/lib/types/enquiry";
+import type { Quote, QuoteDraft } from "@/lib/types/quote";
+import type { Job } from "@/lib/types/job";
+import type { Activity, ActivityInput } from "@/lib/types/activity";
+import type { DashboardView as View, HealthCheck } from "@/lib/types/dashboard";
+import type { DispatchAssignmentInput } from "@/lib/types/operations";
 
 type Campaign={id:string;created_at:string;title:string;facebook_post?:string;content:string;status:string};
-type Customer={id:string;created_at:string;archived_at?:string|null;name:string;phone:string;email:string;preferred_contact:string;address:string;notes:string;status:string};
-type Enquiry={id:string;created_at:string;archived_at?:string|null;status:string;source:string;customer_name:string;phone:string;email:string;preferred_contact:string;pickup_suburb:string;delivery_suburb:string;preferred_date:string;property_size:string;stairs:string;steep_driveway:string;heavy_items:string;item_summary:string;extra_notes:string;ai_summary:string;follow_up_at?:string;customer_id?:string};
-type Quote={id:string;created_at:string;archived_at?:string|null;quote_number:string;status:string;enquiry_id?:string;customer_id?:string;customer_name:string;phone:string;email:string;pickup_suburb:string;delivery_suburb:string;preferred_date:string;scope_summary:string;risk_flags:string;missing_information:string;draft_message:string;price_amount?:number;deposit_amount?:number;valid_until?:string;internal_notes:string};
-type Job={id:string;created_at:string;archived_at?:string|null;job_number:string;status:string;quote_id?:string;enquiry_id?:string;customer_id?:string;customer_name:string;phone:string;email:string;scheduled_start?:string;scheduled_end?:string;pickup_address:string;delivery_address:string;pickup_suburb:string;delivery_suburb:string;crew:string;vehicle:string;scope_summary:string;special_instructions:string;quoted_amount?:number;paid_amount:number};
-type Activity={id:string;created_at:string;enquiry_id?:string;quote_id?:string;job_id?:string;event_type:string;title:string;details:string};
-type QuoteDraft={scope_summary:string;risk_flags:string;missing_information:string;draft_message:string;suggested_follow_up:string};
-type View="dashboard"|"enquiries"|"quotes"|"jobs"|"customers"|"receptionist"|"marketing"|"facebook"|"connections"|"settings";
-type HealthCheck={key:string;label:string;status:"healthy"|"warning"|"error";message:string;checkedAt:string};
+type MetaPost={id:string;created_time:string;message?:string;permalink_url?:string};
 
 const money=(value?:number)=>value==null||Number.isNaN(Number(value))?"Not set":new Intl.NumberFormat("en-AU",{style:"currency",currency:"AUD"}).format(Number(value));
 const localInput=(iso?:string)=>iso?new Date(iso).toISOString().slice(0,16):"";
@@ -32,7 +53,7 @@ export default function Dashboard(){
  const [selectedQuote,setSelectedQuote]=useState<Quote|null>(null);
  const [selectedJob,setSelectedJob]=useState<Job|null>(null);
  const [message,setMessage]=useState("");
- const [metaPosts,setMetaPosts]=useState<any[]>([]);
+ const [metaPosts,setMetaPosts]=useState<MetaPost[]>([]);
  const [metaConnected,setMetaConnected]=useState(false);
  const [metaLoading,setMetaLoading]=useState(false);
  const [lastSync,setLastSync]=useState("");
@@ -54,15 +75,15 @@ export default function Dashboard(){
  const [quoteNotes,setQuoteNotes]=useState("");
  const [jobForm,setJobForm]=useState({scheduled_start:"",scheduled_end:"",pickup_address:"",delivery_address:"",crew:"",vehicle:"",special_instructions:""});
 
- useEffect(()=>{(async()=>{const {data}=await supabase.auth.getSession();if(!data.session){router.replace('/login');return}setUserId(data.session.user.id);await Promise.all([loadAll(),syncFacebook(),runHealthChecks()]);})();},[]);
+ useEffect(()=>{(async()=>{const session=await getBrowserSession();if(!session){router.replace('/login');return}setUserId(session.user.id);await Promise.all([loadAll(),syncFacebook(),runHealthChecks()]);})();},[]);
  async function loadAll(){await Promise.all([loadCampaigns(),loadCustomers(),loadEnquiries(),loadQuotes(),loadJobs(),loadActivities()])}
  async function loadCampaigns(){const {data}=await supabase.from('campaigns').select('*').order('created_at',{ascending:false});setCampaigns(data||[])}
- async function loadCustomers(){const {data}=await supabase.from('customers').select('*').order('created_at',{ascending:false});setCustomers(data||[])}
- async function loadEnquiries(){const {data}=await supabase.from('enquiries').select('*').order('created_at',{ascending:false});setEnquiries(data||[])}
- async function loadQuotes(){const {data}=await supabase.from('quotes').select('*').order('created_at',{ascending:false});setQuotes(data||[])}
- async function loadJobs(){const {data}=await supabase.from('jobs').select('*').order('scheduled_start',{ascending:true});setJobs(data||[])}
- async function loadActivities(){const {data}=await supabase.from('activity_events').select('*').order('created_at',{ascending:false}).limit(500);setActivities(data||[])}
- async function logActivity(values:Partial<Activity>){await supabase.from('activity_events').insert({user_id:userId,event_type:values.event_type||'update',title:values.title||'Updated',details:values.details||'',enquiry_id:values.enquiry_id||null,quote_id:values.quote_id||null,job_id:values.job_id||null});await loadActivities()}
+ async function loadCustomers(){setCustomers(await listCustomers())}
+ async function loadEnquiries(){setEnquiries(await listEnquiries())}
+ async function loadQuotes(){setQuotes(await listQuotes())}
+ async function loadJobs(){setJobs(await listJobs())}
+ async function loadActivities(){setActivities(await listActivities())}
+ async function logActivity(values:ActivityInput){await recordActivity(userId,values);await loadActivities()}
  async function syncFacebook(){
    setMetaLoading(true);setMetaStatus('');
    const {data}=await supabase.auth.getSession();
@@ -86,20 +107,18 @@ export default function Dashboard(){
      setMetaLoading(false);
    }
  }
- async function setEnquiryStatus(id:string,status:string){const {error}=await supabase.from('enquiries').update({status,updated_at:new Date().toISOString()}).eq('id',id);if(error){setMessage(error.message);return}await logActivity({enquiry_id:id,event_type:'enquiry_status',title:`Enquiry marked ${status}`});await loadEnquiries();if(selected?.id===id)setSelected({...selected,status});}
- async function setFollowUp(id:string,value:string){const follow_up_at=value?new Date(value).toISOString():null;const {error}=await supabase.from('enquiries').update({follow_up_at}).eq('id',id);if(error){setMessage(error.message);return}await logActivity({enquiry_id:id,event_type:'follow_up',title:'Follow-up updated',details:value||'Follow-up cleared'});await loadEnquiries();}
+ async function setEnquiryStatus(id:string,status:string){try{await updateEnquiryStatus(id,status);await logActivity({enquiry_id:id,event_type:'enquiry_status',title:`Enquiry marked ${status}`});await loadEnquiries();if(selected?.id===id)setSelected({...selected,status});}catch(error){setMessage(error instanceof Error?error.message:'Unable to update enquiry.');}}
+ async function setFollowUp(id:string,value:string){try{await updateEnquiryFollowUp(id,value);await logActivity({enquiry_id:id,event_type:'follow_up',title:'Follow-up updated',details:value||'Follow-up cleared'});await loadEnquiries();}catch(error){setMessage(error instanceof Error?error.message:'Unable to update follow-up.');}}
  async function convertToCustomer(e:Enquiry){
-   const {data,error}=await supabase.from('customers').insert({user_id:userId,name:e.customer_name,phone:e.phone,email:e.email||'',preferred_contact:e.preferred_contact||'phone',address:'',notes:e.ai_summary||e.extra_notes||'',status:'active'}).select('*').single();
-   if(error){setMessage(error.message);return}
-   await supabase.from('enquiries').update({customer_id:data.id,converted_at:new Date().toISOString(),status:e.status==='new'?'contacted':e.status}).eq('id',e.id);
-   await logActivity({enquiry_id:e.id,event_type:'customer_created',title:'Converted to customer',details:data.name});
-   setMessage(`${e.customer_name} added to Customers.`);await Promise.all([loadCustomers(),loadEnquiries()]);setSelected({...e,customer_id:data.id,status:e.status==='new'?'contacted':e.status});
+   try{
+     const customer=await convertEnquiryToCustomer(userId,e);
+     await logActivity({enquiry_id:e.id,event_type:'customer_created',title:'Converted to customer',details:customer.name});
+     setMessage(`${e.customer_name} added to Customers.`);await Promise.all([loadCustomers(),loadEnquiries()]);setSelected({...e,customer_id:customer.id,status:e.status==='new'?'contacted':e.status});
+   }catch(error){setMessage(error instanceof Error?error.message:'Unable to convert enquiry.');}
  }
- async function addCustomer(){if(!customerForm.name||!customerForm.phone){setMessage('Customer name and phone are required.');return}const {error}=await supabase.from('customers').insert({user_id:userId,...customerForm,status:'active'});if(error){setMessage(error.message);return}setCustomerForm({name:'',phone:'',email:'',preferred_contact:'phone',address:'',notes:''});setMessage('Customer saved.');await loadCustomers();}
+ async function addCustomer(){if(!customerForm.name||!customerForm.phone){setMessage('Customer name and phone are required.');return}try{await createCustomer(userId,customerForm);setCustomerForm({name:'',phone:'',email:'',preferred_contact:'phone',address:'',notes:''});setMessage('Customer saved.');await loadCustomers();}catch(error){setMessage(error instanceof Error?error.message:'Unable to save customer.');}}
  async function archiveRecord(table:'enquiries'|'quotes'|'jobs'|'customers',id:string,restore=false){
-   const archived_at=restore?null:new Date().toISOString();
-   const {error}=await supabase.from(table).update({archived_at}).eq('id',id);
-   if(error){setMessage(error.message);return}
+   try{await setArchived(table,id,restore)}catch(error){setMessage(error instanceof Error?error.message:'Unable to update record.');return}
    setMessage(restore?'Record restored.':'Record archived.');
    if(table==='enquiries'){setSelected(null);await loadEnquiries()}
    if(table==='quotes'){setSelectedQuote(null);await loadQuotes()}
@@ -113,8 +132,7 @@ export default function Dashboard(){
    }
    const typed=window.prompt(`Permanently delete ${label}? This cannot be undone. Type DELETE to continue.`);
    if(typed!=='DELETE')return;
-   const {error}=await supabase.from(table).delete().eq('id',id);
-   if(error){setMessage(error.message);return}
+   try{await deleteRecord(table,id)}catch(error){setMessage(error instanceof Error?error.message:'Unable to delete record.');return}
    setMessage(`${label} permanently deleted.`);
    if(table==='enquiries'){setSelected(null);await Promise.all([loadEnquiries(),loadActivities()])}
    if(table==='quotes'){setSelectedQuote(null);await Promise.all([loadQuotes(),loadActivities()])}
@@ -134,59 +152,53 @@ export default function Dashboard(){
  async function saveQuote(e:Enquiry){
    if(!quoteDraft){setMessage('Generate the quote draft first.');return}
    const quote_number=makeNumber('MHH-Q');
-   const {data,error}=await supabase.from('quotes').insert({
-     user_id:userId,enquiry_id:e.id,customer_id:e.customer_id||null,quote_number,status:'draft',
-     customer_name:e.customer_name,phone:e.phone,email:e.email||'',pickup_suburb:e.pickup_suburb,delivery_suburb:e.delivery_suburb,
-     preferred_date:e.preferred_date||'',scope_summary:quoteDraft.scope_summary,risk_flags:quoteDraft.risk_flags,
-     missing_information:quoteDraft.missing_information,draft_message:quoteDraft.draft_message,
-     price_amount:quotePrice?Number(quotePrice):null,deposit_amount:quoteDeposit?Number(quoteDeposit):null,
-     valid_until:quoteValidUntil||null,internal_notes:quoteNotes
-   }).select('*').single();
-   if(error){setMessage(error.message);return}
-   await supabase.from('enquiries').update({status:'quoted',updated_at:new Date().toISOString()}).eq('id',e.id);
-   await logActivity({enquiry_id:e.id,quote_id:data.id,event_type:'quote_created',title:`Quote ${quote_number} created`,details:quotePrice?`Price ${money(Number(quotePrice))}`:'Price not set'});
-   setMessage(`Quote ${quote_number} saved.`);setQuoteDraft(null);await Promise.all([loadQuotes(),loadEnquiries()]);setSelectedQuote(data);setView('quotes');
+   try{
+     const quote=await createQuote({
+       userId,
+       enquiry:e,
+       draft:quoteDraft,
+       quoteNumber:quote_number,
+       priceAmount:quotePrice?Number(quotePrice):null,
+       depositAmount:quoteDeposit?Number(quoteDeposit):null,
+       validUntil:quoteValidUntil||null,
+       internalNotes:quoteNotes,
+     });
+     await logActivity({enquiry_id:e.id,quote_id:quote.id,event_type:'quote_created',title:`Quote ${quote_number} created`,details:quotePrice?`Price ${money(Number(quotePrice))}`:'Price not set'});
+     setMessage(`Quote ${quote_number} saved.`);setQuoteDraft(null);await Promise.all([loadQuotes(),loadEnquiries()]);setSelectedQuote(quote);setView('quotes');
+   }catch(error){setMessage(error instanceof Error?error.message:'Unable to save quote.');}
  }
  async function updateQuoteStatus(q:Quote,status:string){
-   const {error}=await supabase.from('quotes').update({status,updated_at:new Date().toISOString()}).eq('id',q.id);
-   if(error){setMessage(error.message);return}
-   await logActivity({quote_id:q.id,enquiry_id:q.enquiry_id,event_type:'quote_status',title:`Quote marked ${status}`,details:q.quote_number});
-   await loadQuotes();setSelectedQuote({...q,status});
+   try{await updateQuoteStatusService(q.id,status);await logActivity({quote_id:q.id,enquiry_id:q.enquiry_id,event_type:'quote_status',title:`Quote marked ${status}`,details:q.quote_number});await loadQuotes();setSelectedQuote({...q,status});}
+   catch(error){setMessage(error instanceof Error?error.message:'Unable to update quote.');}
  }
- async function updateQuoteField(q:Quote,field:string,value:any){
-   const {error}=await supabase.from('quotes').update({[field]:value,updated_at:new Date().toISOString()}).eq('id',q.id);
-   if(error){setMessage(error.message);return}
-   await loadQuotes();setSelectedQuote({...q,[field]:value});
+ async function updateQuoteField(q:Quote,field:QuoteEditableField,value:string|number|null){
+   try{await updateQuoteFieldService(q.id,field,value);await loadQuotes();setSelectedQuote({...q,[field]:value});}
+   catch(error){setMessage(error instanceof Error?error.message:'Unable to update quote.');}
  }
  async function convertQuoteToJob(q:Quote){
    if(!jobForm.scheduled_start){setMessage('Set the scheduled start before creating the job.');return}
    const job_number=makeNumber('MHH-J');
-   const {data,error}=await supabase.from('jobs').insert({
-     user_id:userId,enquiry_id:q.enquiry_id||null,quote_id:q.id,customer_id:q.customer_id||null,job_number,status:'booked',
-     customer_name:q.customer_name,phone:q.phone,email:q.email||'',scheduled_start:new Date(jobForm.scheduled_start).toISOString(),
-     scheduled_end:jobForm.scheduled_end?new Date(jobForm.scheduled_end).toISOString():null,
-     pickup_address:jobForm.pickup_address,delivery_address:jobForm.delivery_address,pickup_suburb:q.pickup_suburb,
-     delivery_suburb:q.delivery_suburb,crew:jobForm.crew,vehicle:jobForm.vehicle,scope_summary:q.scope_summary,
-     special_instructions:jobForm.special_instructions,quoted_amount:q.price_amount||null,paid_amount:0
-   }).select('*').single();
-   if(error){setMessage(error.message);return}
-   await supabase.from('quotes').update({status:'accepted',updated_at:new Date().toISOString()}).eq('id',q.id);
-   if(q.enquiry_id)await supabase.from('enquiries').update({status:'booked',updated_at:new Date().toISOString()}).eq('id',q.enquiry_id);
-   await logActivity({job_id:data.id,quote_id:q.id,enquiry_id:q.enquiry_id,event_type:'job_created',title:`Job ${job_number} created`,details:`${q.pickup_suburb} to ${q.delivery_suburb}`});
-   setMessage(`Job ${job_number} created.`);setJobForm({scheduled_start:"",scheduled_end:"",pickup_address:"",delivery_address:"",crew:"",vehicle:"",special_instructions:""});
-   await Promise.all([loadJobs(),loadQuotes(),loadEnquiries()]);setSelectedJob(data);setView('jobs');
+   try{
+     const job=await createJobFromQuote({userId,quote:q,form:jobForm,jobNumber:job_number});
+     await logActivity({job_id:job.id,quote_id:q.id,enquiry_id:q.enquiry_id,event_type:'job_created',title:`Job ${job_number} created`,details:`${q.pickup_suburb} to ${q.delivery_suburb}`});
+     setMessage(`Job ${job_number} created.`);setJobForm({scheduled_start:"",scheduled_end:"",pickup_address:"",delivery_address:"",crew:"",vehicle:"",special_instructions:""});
+     await Promise.all([loadJobs(),loadQuotes(),loadEnquiries()]);setSelectedJob(job);setView('jobs');
+   }catch(error){setMessage(error instanceof Error?error.message:'Unable to create job.');}
  }
  async function updateJobStatus(j:Job,status:string){
-   const {error}=await supabase.from('jobs').update({status,updated_at:new Date().toISOString()}).eq('id',j.id);
-   if(error){setMessage(error.message);return}
-   await logActivity({job_id:j.id,quote_id:j.quote_id,enquiry_id:j.enquiry_id,event_type:'job_status',title:`Job marked ${status}`,details:j.job_number});
-   await loadJobs();setSelectedJob({...j,status});
+   try{await updateJobStatusService(j.id,status);await logActivity({job_id:j.id,quote_id:j.quote_id,enquiry_id:j.enquiry_id,event_type:'job_status',title:`Job marked ${status}`,details:j.job_number});await loadJobs();setSelectedJob({...j,status});}
+   catch(error){setMessage(error instanceof Error?error.message:'Unable to update job.');}
  }
- async function updateJobField(j:Job,field:string,value:any){
-   const finalValue=(field==='scheduled_start'||field==='scheduled_end')&&value?new Date(value).toISOString():value;
-   const {error}=await supabase.from('jobs').update({[field]:finalValue,updated_at:new Date().toISOString()}).eq('id',j.id);
-   if(error){setMessage(error.message);return}
-   await loadJobs();setSelectedJob({...j,[field]:finalValue});
+ async function updateJobField(j:Job,field:JobEditableField,value:string|number|null){
+   try{const finalValue=await updateJobFieldService(j.id,field,value);await loadJobs();setSelectedJob({...j,[field]:finalValue});}
+   catch(error){setMessage(error instanceof Error?error.message:'Unable to update job.');}
+ }
+ async function saveDispatch(j:Job,assignment:DispatchAssignmentInput){
+   const updated=await saveDispatchAssignment(j.id,assignment);
+   await logActivity({job_id:j.id,quote_id:j.quote_id,enquiry_id:j.enquiry_id,event_type:'dispatch_updated',title:`Dispatch updated for ${j.job_number}`,details:`${updated.crew} · ${updated.vehicle}`});
+   await loadJobs();
+   setMessage(`Dispatch updated for ${j.job_number}.`);
+   if(selectedJob?.id===j.id)setSelectedJob({...j,...updated,scheduled_start:updated.scheduled_start??undefined,scheduled_end:updated.scheduled_end??undefined});
  }
  async function runHealthChecks(){
    setHealthLoading(true);
@@ -208,12 +220,12 @@ export default function Dashboard(){
    setMessage('');
    await Promise.all([runHealthChecks(),syncFacebook()]);
  }
- async function signOut(){await supabase.auth.signOut();router.replace('/login')}
+ async function signOut(){await signOutUser();router.replace('/login')}
 
- const newLeads=enquiries.filter(e=>!e.archived_at&&e.status==='new').length;
- const followUps=enquiries.filter(e=>!e.archived_at&&e.follow_up_at&&new Date(e.follow_up_at)<=new Date(Date.now()+86400000)&&!['closed','declined','booked'].includes(e.status)).length;
- const openQuotes=quotes.filter(q=>!q.archived_at&&['draft','approved','sent'].includes(q.status)).length;
- const upcomingJobs=jobs.filter(j=>!j.archived_at&&j.scheduled_start&&new Date(j.scheduled_start)>=new Date()&&!['completed','cancelled'].includes(j.status)).length;
+ const {newLeads,followUps,openQuotes,upcomingJobs}=calculateDashboardStats(enquiries,quotes,jobs);
+ const operationsSchedule=useMemo(()=>buildOperationsSchedule(jobs),[jobs]);
+ const dispatchSummary=useMemo(()=>buildDispatchSummary(jobs),[jobs]);
+ function openOperationsJob(job:Job){setSelectedJob(job);setSearch("");setShowArchived(false);setView("jobs");}
  const filteredCustomers=useMemo(()=>customers.filter(c=>Boolean(c.archived_at)===showArchived).filter(c=>(c.name+' '+c.phone+' '+c.email).toLowerCase().includes(search.toLowerCase())),[customers,search]);
  const filteredEnquiries=useMemo(()=>enquiries.filter(e=>Boolean(e.archived_at)===showArchived).filter(e=>(e.customer_name+' '+e.pickup_suburb+' '+e.delivery_suburb+' '+e.status).toLowerCase().includes(search.toLowerCase())),[enquiries,search]);
  const filteredQuotes=useMemo(()=>quotes.filter(q=>Boolean(q.archived_at)===showArchived).filter(q=>(q.quote_number+' '+q.customer_name+' '+q.pickup_suburb+' '+q.delivery_suburb+' '+q.status).toLowerCase().includes(search.toLowerCase())),[quotes,search]);
@@ -221,17 +233,29 @@ export default function Dashboard(){
  const relevantActivity=(enquiryId?:string,quoteId?:string,jobId?:string)=>activities.filter(a=>(enquiryId&&a.enquiry_id===enquiryId)||(quoteId&&a.quote_id===quoteId)||(jobId&&a.job_id===jobId)).slice(0,20);
 
  return <div className="shell">
-  <aside className="sidebar"><h2 className="brand">MHH AI Manager</h2><div className="tagline">FROM OUR HANDS TO YOUR HOME</div><div className="nav">{([['dashboard','Dashboard'],['enquiries','Enquiries'],['quotes','Quotes'],['jobs','Jobs'],['customers','Customers'],['receptionist','AI Receptionist'],['marketing','Marketing'],['facebook','Facebook'],['connections','Connections'],['settings','Settings']] as [View,string][]).map(([id,label])=><button key={id} className={view===id?'active':''} onClick={()=>{setView(id);setMessage('')}}>{label}</button>)}</div><div className="muted version">Version 5.2.0</div></aside>
+  <aside className="sidebar"><h2 className="brand">MHH AI Manager</h2><div className="tagline">FROM OUR HANDS TO YOUR HOME</div><div className="nav">{([['dashboard','Dashboard'],['operations','Operations'],['enquiries','Enquiries'],['quotes','Quotes'],['jobs','Jobs'],['customers','Customers'],['receptionist','AI Receptionist'],['marketing','Marketing'],['facebook','Facebook'],['connections','Connections'],['settings','Settings']] as [View,string][]).map(([id,label])=><button key={id} className={view===id?'active':''} onClick={()=>{setView(id);setMessage('')}}>{label}</button>)}</div><div className="muted version">Version 5.2.0</div></aside>
   <main className="main"><div className="top"><div><h1>MHH AI Business Manager</h1><div className="muted">Enquiry → quote → booking → job completion</div></div><div className="pill">{newLeads} new · {openQuotes} open quotes · {upcomingJobs} upcoming jobs</div></div>
   {message&&<div className="notice">{message}</div>}
 
   <section className={view==='dashboard'?'view active':'view'}>
-   <KPIGrid
-    newLeads={newLeads}
-    openQuotes={openQuotes}
-    upcomingJobs={upcomingJobs}
-    followUps={followUps}
-/>
+   <DashboardHeader message={message} />
+   <DashboardStats newLeads={newLeads} openQuotes={openQuotes} upcomingJobs={upcomingJobs} followUps={followUps} />
+   <div className="grid two" style={{marginTop:18}}>
+    <NeedsAttention enquiries={enquiries} quotes={quotes} />
+    <UpcomingJobs jobs={jobs} />
+    <RecentActivity items={activities} />
+    <QuickActions onOpenEnquiries={()=>setView('enquiries')} onOpenQuotes={()=>setView('quotes')} onOpenJobs={()=>setView('jobs')} />
+   </div>
+  </section>
+
+  <section className={view==='operations'?'view active':'view'}>
+   <OperationsCentre
+    jobs={jobs}
+    dispatch={dispatchSummary}
+    schedule={operationsSchedule}
+    onOpenJob={openOperationsJob}
+    onSaveDispatch={saveDispatch}
+   />
   </section>
 
   <section className={view==='enquiries'?'view active':'view'}><div className="grid two"><div className="card"><div className="sectionHead"><h3>Enquiry Pipeline</h3><div className="listTools"><button className="btn secondary small" onClick={()=>{setShowArchived(!showArchived);setSelected(null)}}>{showArchived?"Show active":"Show archived"}</button><input className="searchBox" placeholder="Search enquiries" value={search} onChange={e=>setSearch(e.target.value)}/></div></div>{filteredEnquiries.map(e=><button key={e.id} className={`leadRow ${selected?.id===e.id?'selected':''}`} onClick={()=>{setSelected(e);setQuoteDraft(null)}}><div><strong>{e.customer_name}</strong><span className="badge">{e.status}</span></div><span>{e.pickup_suburb} → {e.delivery_suburb}</span><span>{new Date(e.created_at).toLocaleString('en-AU')}</span></button>)}{!filteredEnquiries.length&&<p className="muted">No enquiries found.</p>}</div><div className="card">{!selected?<p className="muted">Select an enquiry to review it.</p>:<div><div className="sectionHead"><h3>{selected.customer_name}</h3><span className="badge">{selected.status}</span></div><p><strong>Phone:</strong> <a href={`tel:${selected.phone}`}>{selected.phone}</a></p><p><strong>Email:</strong> {selected.email||'Not supplied'}</p><div className="notice"><strong>Enquiry summary</strong><br/>{selected.ai_summary}</div><p><strong>Move:</strong> {selected.pickup_suburb} → {selected.delivery_suburb}</p><p><strong>Date:</strong> {selected.preferred_date||'Flexible / not supplied'}</p><p><strong>Property:</strong> {selected.property_size||'Not supplied'}</p><p><strong>Stairs:</strong> {selected.stairs} · <strong>Steep driveway:</strong> {selected.steep_driveway}</p><p><strong>Heavy items:</strong> {selected.heavy_items||'None listed'}</p><p><strong>Items:</strong> {selected.item_summary||'Not supplied'}</p><label>Status</label><select value={selected.status} onChange={e=>setEnquiryStatus(selected.id,e.target.value)}><option>new</option><option>contacted</option><option>quoted</option><option>booked</option><option>closed</option><option>declined</option></select><label>Follow-up date and time</label><input type="datetime-local" defaultValue={localInput(selected.follow_up_at)} onBlur={e=>setFollowUp(selected.id,e.target.value)}/><div className="actions"><a className="btn linkBtn" href={`tel:${selected.phone}`}>Call</a><a className="btn secondary linkBtn" href={`sms:${selected.phone}`}>SMS</a>{!selected.customer_id&&<button className="btn secondary" onClick={()=>convertToCustomer(selected)}>Convert to customer</button>}<button className="btn" onClick={()=>generateQuote(selected)} disabled={quoteLoading}>{quoteLoading?'Drafting…':'Generate quote'}</button></div><div className="recordControls">{selected.archived_at?<button className="btn secondary" onClick={()=>archiveRecord('enquiries',selected.id,true)}>Restore enquiry</button>:<button className="btn secondary" onClick={()=>archiveRecord('enquiries',selected.id)}>Archive enquiry</button>}<button className="btn danger" onClick={()=>permanentlyDelete('enquiries',selected.id,`enquiry for ${selected.customer_name}`)}>Delete permanently</button></div>
@@ -253,7 +277,7 @@ export default function Dashboard(){
 
   <section className={view==='marketing'?'view active':'view'}><div className="card"><h3>Marketing Module</h3><p>Saved campaigns: <strong>{campaigns.length}</strong></p>{campaigns.slice(0,8).map(c=><div className="campaign" key={c.id}><strong>{c.title}</strong><span className="badge" style={{marginLeft:10}}>{c.status}</span><div className="result" style={{marginTop:10}}>{c.facebook_post||c.content}</div></div>)}</div></section>
 
-  <section className={view==='facebook'?'view active':'view'}><div className="grid two"><div className="card"><h3>Facebook Connection Diagnostic</h3><p>Overall connection: <strong className={metaConnected?'success':'error'}>{metaConnected?'Connected':'Not connected'}</strong></p><p>Recent-post access: <strong className={metaPostsReadable?'success':'error'}>{metaPostsReadable?'Working':'Not verified'}</strong></p><p>Configured Page: <strong>{metaPageName||'Not verified'}</strong></p>{metaPageLink&&<p><a href={metaPageLink} target="_blank" rel="noreferrer">Open connected Facebook Page</a></p>}<p>Graph API setting: <strong>{metaGraphVersion||'Not reported'}</strong></p><p>Last check: {lastSync?new Date(lastSync).toLocaleString('en-AU'):'Never'}</p>{metaStatus&&<div className={metaConnected?'notice':'notice diagnosticError'}><strong>{metaConnected?'Check passed':'Check result'}</strong><br/>{metaStatus}</div>}<button className="btn" disabled={metaLoading} onClick={syncFacebook}>{metaLoading?'Checking…':'Run Facebook Connection Check'}</button></div><div className="card"><div className="sectionHead"><h3>Recent Page Posts</h3><span className="badge">{metaPosts.length} loaded</span></div>{metaPosts.map((p:any)=><div className="campaign" key={p.id}><div className="muted">{new Date(p.created_time).toLocaleString('en-AU')}</div><p>{p.message||'(Post without text)'}</p>{p.permalink_url&&<a href={p.permalink_url} target="_blank" rel="noreferrer">Open post on Facebook</a>}</div>)}{!metaPosts.length&&<p className="muted">Run the connection check to load recent posts.</p>}</div></div></section>
+  <section className={view==='facebook'?'view active':'view'}><div className="grid two"><div className="card"><h3>Facebook Connection Diagnostic</h3><p>Overall connection: <strong className={metaConnected?'success':'error'}>{metaConnected?'Connected':'Not connected'}</strong></p><p>Recent-post access: <strong className={metaPostsReadable?'success':'error'}>{metaPostsReadable?'Working':'Not verified'}</strong></p><p>Configured Page: <strong>{metaPageName||'Not verified'}</strong></p>{metaPageLink&&<p><a href={metaPageLink} target="_blank" rel="noreferrer">Open connected Facebook Page</a></p>}<p>Graph API setting: <strong>{metaGraphVersion||'Not reported'}</strong></p><p>Last check: {lastSync?new Date(lastSync).toLocaleString('en-AU'):'Never'}</p>{metaStatus&&<div className={metaConnected?'notice':'notice diagnosticError'}><strong>{metaConnected?'Check passed':'Check result'}</strong><br/>{metaStatus}</div>}<button className="btn" disabled={metaLoading} onClick={syncFacebook}>{metaLoading?'Checking…':'Run Facebook Connection Check'}</button></div><div className="card"><div className="sectionHead"><h3>Recent Page Posts</h3><span className="badge">{metaPosts.length} loaded</span></div>{metaPosts.map(p=><div className="campaign" key={p.id}><div className="muted">{new Date(p.created_time).toLocaleString('en-AU')}</div><p>{p.message||'(Post without text)'}</p>{p.permalink_url&&<a href={p.permalink_url} target="_blank" rel="noreferrer">Open post on Facebook</a>}</div>)}{!metaPosts.length&&<p className="muted">Run the connection check to load recent posts.</p>}</div></div></section>
 
   <section className={view==='connections'?'view active':'view'}>
    <div className="sectionHead"><div><h2>Connection Centre</h2><p className="muted">Live health checks for services used by MHH AI Business Manager.</p></div><button className="btn" disabled={healthLoading||metaLoading} onClick={runAllConnectionChecks}>{healthLoading||metaLoading?'Checking…':'Run all checks'}</button></div>
