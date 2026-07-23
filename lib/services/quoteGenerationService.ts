@@ -1,7 +1,7 @@
 import "server-only";
 
 import OpenAI from "openai";
-import { getServerConfig } from "@/lib/config";
+import { getOpenAIConfig } from "@/lib/config";
 import type { Enquiry } from "@/lib/types/enquiry";
 import type { QuoteDraft } from "@/lib/types/quote";
 
@@ -18,11 +18,11 @@ function isQuoteDraft(value: unknown): value is QuoteDraft {
 }
 
 export async function generateQuoteDraft(enquiry: Enquiry): Promise<QuoteDraft> {
-  const config = getServerConfig();
-  const client = new OpenAI({ apiKey: config.openAiApiKey });
+  const config = getOpenAIConfig();
+  const client = new OpenAI({ apiKey: config.apiKey });
 
   const response = await client.responses.create({
-    model: config.openAiModel,
+    model: config.model,
     instructions: `You are the private quote drafting assistant for Ma's Helping Hand, a furniture removals business in Nanango, Queensland.
 
 Use Australian English. Never invent a price. Never claim the business is insured. Never promise availability. Do not state that a quote is final. Analyse the enquiry and prepare a professional draft message for Mick to edit and approve.

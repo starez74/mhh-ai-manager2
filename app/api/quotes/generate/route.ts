@@ -1,13 +1,14 @@
 import { NextRequest } from "next/server";
-import { authenticateRequest } from "@/lib/services/serverAuthService";
+import { getAuthenticatedRequest } from "@/lib/api/auth";
 import { generateQuoteDraft } from "@/lib/services/quoteGenerationService";
 import { apiError, apiSuccess, errorMessage } from "@/lib/api/responses";
+import { logApiError } from "@/lib/api/logging";
 import type { Enquiry } from "@/lib/types/enquiry";
 
 export async function POST(request: NextRequest) {
   try {
-    const user = await authenticateRequest(request);
-    if (!user) return apiError("Unauthorised.", 401);
+    const auth = await getAuthenticatedRequest(request);
+    if (!auth) return apiError("Unauthorised.", 401);
 
     const body: unknown = await request.json();
     const enquiry = (body as { enquiry?: Enquiry }).enquiry;
@@ -18,10 +19,8 @@ export async function POST(request: NextRequest) {
     const quote = await generateQuoteDraft(enquiry);
     return apiSuccess({ quote });
   } catch (error) {
+    logApiError("/api/quotes/generate", error);
     const message = errorMessage(error, "Unexpected quote-generation error.");
-    return apiError(
-      message === "The AI returned an invalid quote format." ? message : message,
-      message.includes("invalid quote format") ? 502 : 500
-    );
+    return apiError(message, message.includes("invalid quote format") ? 502 : 500);
   }
 }

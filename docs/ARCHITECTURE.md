@@ -19,4 +19,4 @@ The dashboard remains a client component, but its data loading, activity recordi
 
 ## Proposed
 
-Further extraction should move the remaining customer, enquiry, quote and job mutations from the dashboard page into their owning services. Meta, marketing and health routes should then use the same authentication, configuration and response helpers.
+Further extraction should move the remaining customer, enquiry, quote and job mutations from the dashboard page into their owning services. Meta, marketing and health routes now use shared authentication, configuration, logging and response helpers. Provider and health orchestration lives in services, leaving route handlers as coordinators.

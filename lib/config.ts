@@ -4,6 +4,18 @@ type PublicConfig = {
   businessWebsite: string;
 };
 
+type OpenAIConfig = {
+  apiKey: string;
+  model: string;
+};
+
+type MetaConfig = {
+  pageId?: string;
+  pageAccessToken?: string;
+  graphApiVersion: string;
+  publishingEnabled: boolean;
+};
+
 type ServerConfig = {
   openAiApiKey: string;
   openAiModel: string;
@@ -33,13 +45,32 @@ export function getPublicConfig(): PublicConfig {
   };
 }
 
-export function getServerConfig(): ServerConfig {
+export function getOpenAIConfig(): OpenAIConfig {
   return {
-    openAiApiKey: required("OPENAI_API_KEY", process.env.OPENAI_API_KEY),
-    openAiModel: process.env.OPENAI_MODEL?.trim() || "gpt-5-mini",
-    metaPageId: process.env.META_PAGE_ID?.trim(),
-    metaPageAccessToken: process.env.META_PAGE_ACCESS_TOKEN?.trim(),
-    metaGraphApiVersion: process.env.META_GRAPH_API_VERSION?.trim() || "v25.0",
-    metaPublishingEnabled: process.env.META_PUBLISHING_ENABLED === "true",
+    apiKey: required("OPENAI_API_KEY", process.env.OPENAI_API_KEY),
+    model: process.env.OPENAI_MODEL?.trim() || "gpt-5-mini",
+  };
+}
+
+export function getMetaConfig(): MetaConfig {
+  return {
+    pageId: process.env.META_PAGE_ID?.trim(),
+    pageAccessToken: process.env.META_PAGE_ACCESS_TOKEN?.trim(),
+    graphApiVersion: process.env.META_GRAPH_API_VERSION?.trim() || "v25.0",
+    publishingEnabled: process.env.META_PUBLISHING_ENABLED === "true",
+  };
+}
+
+export function getServerConfig(): ServerConfig {
+  const openAI = getOpenAIConfig();
+  const meta = getMetaConfig();
+
+  return {
+    openAiApiKey: openAI.apiKey,
+    openAiModel: openAI.model,
+    metaPageId: meta.pageId,
+    metaPageAccessToken: meta.pageAccessToken,
+    metaGraphApiVersion: meta.graphApiVersion,
+    metaPublishingEnabled: meta.publishingEnabled,
   };
 }

@@ -8,7 +8,8 @@
 - Added customer, enquiry, quote, job, dashboard, authentication and activity services.
 - Added explicit browser and server Supabase client creation.
 - Added central environment configuration validation.
-- Added shared API response helpers.
+- Added shared API authentication, error, logging and response helpers.
+- Refactored marketing, health and Meta routes into thin coordinators backed by services.
 - Split the dashboard summary into reusable components.
 - Removed the duplicate root KPI grid and retained one authoritative dashboard implementation.
 - Refactored quote generation and public reception routes to use services.

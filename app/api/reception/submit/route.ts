@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { createPublicEnquiry } from "@/lib/services/enquiryService";
 import { apiError, apiSuccess, errorMessage } from "@/lib/api/responses";
+import { logApiError } from "@/lib/api/logging";
 import type { ReceptionSubmission } from "@/lib/types/enquiry";
 
 function text(value: unknown, max = 1000) {
@@ -44,7 +45,7 @@ export async function POST(request: NextRequest) {
     await createPublicEnquiry(input, summary);
     return apiSuccess({ ok: true });
   } catch (error) {
-    console.error("Reception submission failed:", errorMessage(error, "Unknown error"));
+    logApiError("/api/reception/submit", error);
     return apiError(errorMessage(error, "Unable to submit enquiry."), 500);
   }
 }
